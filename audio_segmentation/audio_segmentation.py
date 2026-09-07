@@ -168,7 +168,8 @@ def segment_service_audio(plan: ServicePlan) -> None:
         raise FileNotFoundError(f"Audio file not found at path: {plan.raw_audio_filepath}")
 
     # Setup Output Folder using the generalized PROCESSED_AUDIO_DIR
-    output_dir = os.path.join(PROCESSED_AUDIO_DIR, f"Output_{plan.date}")
+    base_filename = os.path.splitext(os.path.basename(plan.raw_audio_filepath))[0]
+    output_dir = os.path.join(PROCESSED_AUDIO_DIR, f"Output_{base_filename}")
     
     if os.path.exists(output_dir):
         raise FileExistsError(f"Destination folder already exists: {output_dir}")
@@ -176,7 +177,7 @@ def segment_service_audio(plan: ServicePlan) -> None:
     os.makedirs(output_dir)
     
     # Step A: Create Lightweight MP3 Preview
-    temp_mp3_path = f"temp_{plan.date}.mp3"
+    temp_mp3_path = f"temp_{base_filename}.mp3"
     compress_wav_to_mp3(plan.raw_audio_filepath, temp_mp3_path)
 
     # Step B: Initialize Gemini Client & Upload Preview File

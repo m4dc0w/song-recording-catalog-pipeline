@@ -155,7 +155,7 @@ class TestAudioSegmentation(unittest.TestCase):
         def side_effect(path):
             if "R_20260906" in path: # Simulate raw audio exists
                 return True
-            if "Output_2026-09-06" in path: # Simulate output dir exists
+            if "Output_R_20260906-103109" in path: # Simulate output dir exists
                 return True
             return False
             

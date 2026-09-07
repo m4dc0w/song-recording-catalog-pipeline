@@ -5,6 +5,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 from data_sources.planning_center import fetch_service_plan, fetch_recent_plans
+from data_sources.local_drive import discover_raw_audio
 from audio_segmentation.audio_segmentation import segment_service_audio
 
 # Load environment variables
@@ -105,19 +106,33 @@ def main() -> None:
         plan = fetch_service_plan(args.service_type, target_plan_id, target_date)
         
         # 3. Handle raw audio filepath binding (Optional CLI override vs Automated Discovery)
+        raw_audio_files = []
         if args.audio_file:
             raw_audio_path = os.path.join(RAW_AUDIO_DIR, args.audio_file)
             if not os.path.exists(raw_audio_path):
                 print(f"❌ Error: Raw audio file not found at {raw_audio_path}")
                 return
-            plan.raw_audio_filepath = raw_audio_path
+            raw_audio_files = [raw_audio_path]
+        else:
+            print("🔍 Automatically discovering raw audio files for the service date...")
+            discovered_paths = discover_raw_audio(target_date, RAW_AUDIO_DIR)
+            if discovered_paths:
+                print(f"✅ Found {len(discovered_paths)} matching raw audio file(s).")
+                raw_audio_files = discovered_paths
+            else:
+                print(f"❌ Error: Could not automatically find any raw audio files for {target_date} in {RAW_AUDIO_DIR}.")
+                print("Please provide one manually using the --audio-file argument.")
+                return
         
         # 4. Hand off execution to the audio segmentation worker (which auto-discovers/stitches if filepath is empty)
-        try:
-            segment_service_audio(plan)
-        except FileExistsError as fe:
-            print(f"\n⚠️ Skipping Audio Segmentation: {fe}")
-            print("To re-run, delete or move the existing destination folder.")
+        for audio_path in raw_audio_files:
+            plan.raw_audio_filepath = audio_path
+            print(f"\n🎧 Processing: {os.path.basename(audio_path)}")
+            try:
+                segment_service_audio(plan)
+            except FileExistsError as fe:
+                print(f"\n⚠️ Skipping Audio Segmentation for {os.path.basename(audio_path)}: {fe}")
+                print("To re-run, delete or move the existing destination folder.")
         
         print("\n🎉 Pipeline completed successfully!")
         
