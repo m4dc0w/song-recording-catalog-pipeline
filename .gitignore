@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Audio Files (Prevent pushing massive files to GitHub)
+*.wav
+*.mp3
+*.flac
+*.aiff
+
+# Video Files (Prevent pushing massive files to GitHub)
+*.mp4
