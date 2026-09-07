@@ -235,3 +235,7 @@ __marimo__/
 
 # macOS specific
 .DS_Store
+
+# Secrets (CRITICAL)
+credentials.json
+*-service-account.json
