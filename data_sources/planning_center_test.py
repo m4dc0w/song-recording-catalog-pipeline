@@ -10,17 +10,6 @@ from data_sources.planning_center import fetch_service_plan
 class TestPlanningCenterAPI(unittest.TestCase):
     """Test suite for the Planning Center API data ingestion module."""
 
-    def setUp(self) -> None:
-        """Sets up mock environment variables for the tests."""
-        # Temporarily inject fake credentials into the environment for the test runtime
-        os.environ["PCO_APP_ID"] = "mock_app_id"
-        os.environ["PCO_SECRET"] = "mock_secret"
-
-    def tearDown(self) -> None:
-        """Cleans up the environment after tests run."""
-        os.environ.pop("PCO_APP_ID", None)
-        os.environ.pop("PCO_SECRET", None)
-
     @patch("data_sources.planning_center.PCO_APP_ID", "")
     @patch("data_sources.planning_center.PCO_SECRET", "")
     def test_fetch_service_plan_missing_credentials(self) -> None:
@@ -28,6 +17,8 @@ class TestPlanningCenterAPI(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Planning Center credentials missing"):
             fetch_service_plan("123", "456", "2026-09-06")
 
+    @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
+    @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")
     @patch("data_sources.planning_center.requests.get")
     def test_fetch_service_plan_http_error(self, mock_get) -> None:
         """Ensures HTTP errors (like 404 Not Found) bubble up correctly."""
@@ -39,6 +30,8 @@ class TestPlanningCenterAPI(unittest.TestCase):
         with self.assertRaises(requests.exceptions.HTTPError):
             fetch_service_plan("123", "456", "2026-09-06")
 
+    @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
+    @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")
     @patch("data_sources.planning_center.requests.get")
     def test_fetch_service_plan_success(self, mock_get) -> None:
         """Verifies successful JSON parsing and mapping to dataclasses."""
