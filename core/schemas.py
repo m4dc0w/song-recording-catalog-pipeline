@@ -18,6 +18,19 @@ class Song:
 # =============================================================================
 
 @dataclass
+class PlanSummary:
+    """A lightweight representation of a Planning Center plan for list views and menus.
+    
+    Attributes:
+        id (str): The unique Planning Center Plan ID.
+        dates (str): The human-readable date string provided by Planning Center.
+        title (str): An optional custom title for the service plan (e.g., 'Vision Sunday').
+    """
+    id: str
+    dates: str
+    title: str = ""
+
+@dataclass
 class Sermon:
     """Represents the main spoken message or sermon in a service.
     
