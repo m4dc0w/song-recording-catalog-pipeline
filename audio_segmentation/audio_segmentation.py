@@ -169,7 +169,11 @@ def segment_service_audio(plan: ServicePlan) -> None:
 
     # Setup Output Folder using the generalized PROCESSED_AUDIO_DIR
     output_dir = os.path.join(PROCESSED_AUDIO_DIR, f"Output_{plan.date}")
-    os.makedirs(output_dir, exist_ok=True)
+    
+    if os.path.exists(output_dir):
+        raise FileExistsError(f"Destination folder already exists: {output_dir}")
+        
+    os.makedirs(output_dir)
     
     # Step A: Create Lightweight MP3 Preview
     temp_mp3_path = f"temp_{plan.date}.mp3"

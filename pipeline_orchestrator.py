@@ -113,7 +113,11 @@ def main() -> None:
             plan.raw_audio_filepath = raw_audio_path
         
         # 4. Hand off execution to the audio segmentation worker (which auto-discovers/stitches if filepath is empty)
-        segment_service_audio(plan)
+        try:
+            segment_service_audio(plan)
+        except FileExistsError as fe:
+            print(f"\n⚠️ Skipping Audio Segmentation: {fe}")
+            print("To re-run, delete or move the existing destination folder.")
         
         print("\n🎉 Pipeline completed successfully!")
         

@@ -115,7 +115,7 @@ class TestAudioSegmentation(unittest.TestCase):
         # Assert that the dynamically loaded FFMPEG_PATH was passed to subprocess
         self.assertIn(FFMPEG_PATH, args)
         self.assertIn("-b:a", args)
-        self.assertIn("64k", args)
+        self.assertIn("192k", args)
         self.assertIn("output.mp3", args[-1]) 
 
     @patch('audio_segmentation.audio_segmentation.subprocess.run')
@@ -144,6 +144,31 @@ class TestAudioSegmentation(unittest.TestCase):
         mock_file.assert_called_once_with(os.path.join("/mock_dir", "2026-08-30_DAW_Locators.txt"), 'w', encoding='utf-8')
         handle = mock_file()
         handle.write.assert_called_with("1.000\tAmazing Grace\n")
+
+    # ==============================================================================
+    # 5. PIPELINE EXECUTION & ERROR HANDLING
+    # ==============================================================================
+    @patch('audio_segmentation.audio_segmentation.os.path.exists')
+    def test_segment_service_audio_raises_error_if_output_dir_exists(self, mock_exists) -> None:
+        """Ensures that the pipeline aborts safely if the destination folder already exists to prevent accidental overwrites."""
+        # Setup the mock to return True for the raw audio file, and True for the output directory
+        def side_effect(path):
+            if "R_20260906" in path: # Simulate raw audio exists
+                return True
+            if "Output_2026-09-06" in path: # Simulate output dir exists
+                return True
+            return False
+            
+        mock_exists.side_effect = side_effect
+        
+        plan = ServicePlan(
+            date="2026-09-06",
+            songs=[],
+            raw_audio_filepath="/mock/raw_audio/R_20260906-103109.wav"
+        )
+        
+        with self.assertRaisesRegex(FileExistsError, "Destination folder already exists"):
+            segment_service_audio(plan)
 
 
 if __name__ == '__main__':
