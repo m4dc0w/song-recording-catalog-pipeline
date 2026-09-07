@@ -43,8 +43,10 @@ def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "background.pn
         print("=" * 53)
 
         # We need a temp text file for FFmpeg to draw the text, avoiding escaping nightmares
+        # Replace " - " with a newline character (\n) for multiline rendering
+        multiline_title = song_title.replace(" - ", "\n")
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as temp_txt:
-            temp_txt.write(song_title)
+            temp_txt.write(multiline_title)
             temp_txt_path = temp_txt.name
 
         try:
@@ -80,12 +82,12 @@ def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "background.pn
                 print(f"  -> Error: Could not analyze audio dynamics for {song_title}. Skipping.")
                 continue
 
-            print("  -> Pass 2: Rendering final video with precise normalization...")
+            print("  -> Pass 2: Rendering final video with OLED-safe text and 320k audio...")
             pass2_cmd = [
                 ffmpeg_path, "-y", "-hide_banner", "-loop", "1", "-framerate", "30",
                 "-i", bg_image_path,
                 "-i", full_audio_path,
-                "-vf", f"drawtext=textfile={temp_txt_path}:fontcolor=white:fontsize=40:x=(w-text_w)/2:y=(h-text_h)/2",
+                "-vf", f"drawtext=textfile={temp_txt_path}:line_spacing=20:fontcolor=white@0.8:fontsize=96:shadowcolor=black@0.7:shadowx=4:shadowy=4:x=(w-text_w)/2:y=(h-text_h)/2",
                 "-af", f"loudnorm=I=-14:TP=-1:measured_I={measured_i}:measured_TP={measured_tp}:measured_LRA={measured_lra}:measured_thresh={measured_thresh}:offset={target_offset}:linear=true",
                 "-c:v", "libx264", "-tune", "stillimage",
                 "-c:a", "aac", "-b:a", "320k",
