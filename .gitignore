@@ -232,3 +232,6 @@ __marimo__/
 *.flv
 *.webm
 *.m4v
+
+# macOS specific
+.DS_Store
