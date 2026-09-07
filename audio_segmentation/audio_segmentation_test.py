@@ -78,7 +78,7 @@ class TestAudioSegmentation(unittest.TestCase):
         self.assertEqual(len(valid), 1)
         self.assertEqual(valid[0]["label"], "speaking")
 
-    def test_validate_segments_allows_intentional_overlaps(self) -> None: 
+    def test_validate_segments_allows_intentional_overlaps(self) -> None:
         """Ensures chained song interludes and speech bleed can safely overlap without being trimmed."""
         segments = [
             {"label": "song", "start_time": "00:01:00.000", "end_time": "00:05:30.000"},
