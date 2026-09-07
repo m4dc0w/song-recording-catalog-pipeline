@@ -3,8 +3,8 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 import requests
-from core.schemas import ServicePlan
-from data_sources.planning_center import fetch_service_plan
+from core.schemas import ServicePlan, PlanSummary
+from data_sources.planning_center import fetch_service_plan, fetch_recent_plans
 
 
 class TestPlanningCenterAPI(unittest.TestCase):
@@ -89,6 +89,74 @@ class TestPlanningCenterAPI(unittest.TestCase):
         self.assertEqual(result_plan.songs[1].title, "A Song With No Key")
         self.assertEqual(result_plan.songs[1].key, "")
 
+    @patch("data_sources.planning_center.PCO_APP_ID", "")
+    @patch("data_sources.planning_center.PCO_SECRET", "")
+    def test_fetch_recent_plans_missing_credentials(self) -> None:
+        """Ensures fetch_recent_plans halts if environment variables are missing."""
+        with self.assertRaisesRegex(ValueError, "Planning Center credentials missing"):
+            fetch_recent_plans("123")
+
+    @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
+    @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")
+    @patch("data_sources.planning_center.requests.get")
+    def test_fetch_recent_plans_http_error(self, mock_get) -> None:
+        """Ensures HTTP errors are caught when fetching recent plans."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("401 Unauthorized")
+        mock_get.return_value = mock_response
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            fetch_recent_plans("123")
+
+    @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
+    @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")
+    @patch("data_sources.planning_center.requests.get")
+    def test_fetch_recent_plans_success(self, mock_get) -> None:
+        """Verifies successful mapping of recent plans to PlanSummary dataclasses."""
+        mock_json_data = {
+            "data": [
+                {
+                    "id": "67890",
+                    "attributes": {
+                        "dates": "September 6, 2026",
+                        "title": "Vision Sunday"
+                    }
+                },
+                {
+                    "id": "67891",
+                    "attributes": {
+                        "dates": "August 30, 2026",
+                        "title": None
+                    }
+                }
+            ]
+        }
+        
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_json_data
+        mock_get.return_value = mock_response
+
+        # Execute
+        recent_plans = fetch_recent_plans("123", limit=2)
+
+        # Assertions
+        mock_get.assert_called_once()
+        self.assertIn("service_types/123/plans", mock_get.call_args[0][0])
+        self.assertEqual(mock_get.call_args[1]["params"], {"per_page": 2, "order": "-sort_date"})
+        
+        self.assertEqual(len(recent_plans), 2)
+        
+        # Verify first plan mapped correctly to PlanSummary dataclass
+        self.assertIsInstance(recent_plans[0], PlanSummary)
+        self.assertEqual(recent_plans[0].id, "67890")
+        self.assertEqual(recent_plans[0].dates, "September 6, 2026")
+        self.assertEqual(recent_plans[0].title, "Vision Sunday")
+        
+        # Verify second plan mapped correctly and handled null title safely
+        self.assertIsInstance(recent_plans[1], PlanSummary)
+        self.assertEqual(recent_plans[1].id, "67891")
+        self.assertEqual(recent_plans[1].dates, "August 30, 2026")
+        self.assertEqual(recent_plans[1].title, "")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
