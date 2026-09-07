@@ -11,6 +11,7 @@ from audio_segmentation.audio_segmentation import (
     slice_audio_ffmpeg_copy,
     generate_daw_locators,
     _format_setlist_for_ai,
+    segment_service_audio,
     FFMPEG_PATH
 )
 
