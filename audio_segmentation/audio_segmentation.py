@@ -144,7 +144,22 @@ def generate_daw_locators(segments: list, output_dir: str, service_date: str) ->
 # ==============================================================================
 # 3. MAIN EXECUTION PIPELINE
 # ==============================================================================
-def process_service_pipeline(plan: ServicePlan) -> None:
+def segment_service_audio(plan: ServicePlan) -> None:
+    """Executes the complete AI audio segmentation pipeline for a single service plan.
+    
+    Takes the raw audio file associated with the service plan, compresses a 
+    temporary preview for the Gemini API, prompts the AI to identify precise 
+    timestamps based on the setlist, and uses FFmpeg to extract bit-perfect 
+    slices for each song and spoken segment.
+    
+    Args:
+        plan (ServicePlan): The structured dataclass containing the service details, 
+            setlist items, and the localized path to the raw .wav file.
+            
+    Raises:
+        ValueError: If the raw_audio_filepath is missing from the plan.
+        FileNotFoundError: If the raw_audio_filepath does not exist on disk.
+    """
     if not plan.raw_audio_filepath:
         raise ValueError(f"Cannot process service for {plan.date}: 'raw_audio_filepath' is missing.")
 
@@ -386,6 +401,6 @@ if __name__ == "__main__":
     print("==========================")
     
     if os.path.exists(mock_plan.raw_audio_filepath):
-        process_service_pipeline(mock_plan)
+        segment_service_audio(mock_plan)
     else:
         print(f"Please specify a valid path to your input WAV file. '{mock_plan.raw_audio_filepath}' not found.")
