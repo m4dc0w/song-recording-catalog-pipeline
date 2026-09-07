@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 import requests
 from dotenv import load_dotenv
 
-from core.schemas import ServicePlan, Song
+from core.schemas import ServicePlan, Song, PlanSummary
 
 # Load variables from .env file into the environment
 load_dotenv()
@@ -72,3 +72,46 @@ def fetch_service_plan(
 
     print(f"✅ Successfully loaded {len(songs)} songs from Planning Center.")
     return ServicePlan(date=service_date, songs=songs)
+
+
+def fetch_recent_plans(service_type_id: str, limit: int = 5) -> List[PlanSummary]:
+    """Fetches a list of the most recent service plans for a given service type.
+    
+    Args:
+        service_type_id (str): The PCO Service Type ID.
+        limit (int): The number of recent plans to retrieve.
+        
+    Returns:
+        List[PlanSummary]: A list of PlanSummary dataclasses containing id, dates, and title.
+            
+    Raises:
+        ValueError: If PCO credentials are not found.
+        requests.exceptions.HTTPError: If the API request fails.
+    """
+    if not PCO_APP_ID or not PCO_SECRET:
+        raise ValueError("ERROR: Planning Center credentials missing in .env.")
+
+    url: str = f"{PCO_BASE_URL}/service_types/{service_type_id}/plans"
+    params = {"per_page": limit, "order": "-sort_date"}
+    
+    print("📡 Fetching recent plans from Planning Center...")
+    
+    response = requests.get(url, auth=(PCO_APP_ID, PCO_SECRET), params=params, timeout=15)
+    response.raise_for_status()
+    
+    data: Dict[str, Any] = response.json()
+    recent_plans: List[PlanSummary] = []
+    
+    for item in data.get("data", []):
+        plan_id = item.get("id", "")
+        attributes = item.get("attributes", {})
+        
+        recent_plans.append(
+            PlanSummary(
+                id=plan_id,
+                dates=attributes.get("dates", "Unknown Date"),
+                title=attributes.get("title") or ""
+            )
+        )
+        
+    return recent_plans
