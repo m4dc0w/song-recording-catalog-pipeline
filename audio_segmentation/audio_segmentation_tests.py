@@ -1,51 +1,65 @@
+import os
 import unittest
 from unittest.mock import patch, mock_open
-import os
 
-# Import the functions and config to test from the main pipeline script
-from audio_segmentation import (
+from core.schemas import ServicePlan, Song
+from audio_segmentation.audio_segmentation import (
     clean_filename,
     time_to_ms,
     validate_segments,
     compress_wav_to_mp3,
-    slice_and_fade_ffmpeg,
+    slice_audio_ffmpeg_copy,
     generate_daw_locators,
-    FFMPEG_PATH  # Imported dynamically to ensure mock accuracy
+    _format_setlist_for_ai,
+    FFMPEG_PATH
 )
+
 
 class TestAudioSegmentation(unittest.TestCase):
 
     # ==============================================================================
-    # 1. STRING AND FILENAME PARSING
+    # 1. STRING, DATACLASS, AND FILENAME PARSING
     # ==============================================================================
-    def test_clean_filename_removes_illegal_chars(self):
+    def test_clean_filename_removes_illegal_chars(self) -> None:
         """Ensures macOS/Windows filesystem illegal characters are stripped."""
         self.assertEqual(clean_filename("Amazing Grace?"), "Amazing Grace")
         self.assertEqual(clean_filename('Song "Title" | Remix/Edit\\*'), "Song Title  RemixEdit")
         self.assertEqual(clean_filename("   Praise <God> : Doxology   "), "Praise God  Doxology")
 
+    def test_format_setlist_for_ai(self) -> None:
+        """Ensures the ServicePlan dataclass converts songs into the expected AI prompt string."""
+        plan = ServicePlan(
+            date="2026-09-06",
+            songs=[
+                Song(title="Amazing Grace", key="G"),
+                Song(title="A Song With No Key")
+            ]
+        )
+        expected = "Amazing Grace (G)\nA Song With No Key"
+        self.assertEqual(_format_setlist_for_ai(plan), expected)
+
     # ==============================================================================
     # 2. TIME CONVERSION LOGIC
     # ==============================================================================
-    def test_time_to_ms_valid_formats(self):
+    def test_time_to_ms_valid_formats(self) -> None:
         """Tests standard sub-second timestamp string conversions for 3-part format."""
         self.assertEqual(time_to_ms("00:00:01.000"), 1000)
         self.assertEqual(time_to_ms("00:00:01.500"), 1500)
         # (1 hour * 3600) + (2 min * 60) + 3 sec = 3723 sec -> 3723000 ms + 450 ms
         self.assertEqual(time_to_ms("01:02:03.450"), 3723450) 
         
-    def test_time_to_ms_fallback_2_part_formats(self):
+    def test_time_to_ms_fallback_2_part_formats(self) -> None:
         """Tests that the function can gracefully handle 2-part MM:SS.f if Gemini hallucinates it."""
         self.assertEqual(time_to_ms("05:30.000"), 330000) # 5 min * 60 = 300s + 30s = 330s -> 330000ms
         self.assertEqual(time_to_ms("01:00.500"), 60500) 
         
-    def test_time_to_ms_sub_second_padding(self):
+    def test_time_to_ms_sub_second_padding(self) -> None:
         """Tests that fractional seconds are padded correctly to milliseconds."""
         self.assertEqual(time_to_ms("00:00:05.5"), 5500)   # .5 should be 500ms
         self.assertEqual(time_to_ms("00:00:05.05"), 5050)  # .05 should be 50ms
         self.assertEqual(time_to_ms("00:00:05.500"), 5500) 
 
-    def test_time_to_ms_invalid_format_returns_zero(self):
+    def test_time_to_ms_invalid_format_returns_zero(self) -> None:
         """Ensures malformed timestamps do not crash the pipeline."""
         self.assertEqual(time_to_ms("invalid_time_string"), 0)
         self.assertEqual(time_to_ms("00:00"), 0)
@@ -53,7 +67,7 @@ class TestAudioSegmentation(unittest.TestCase):
     # ==============================================================================
     # 3. AI OUTPUT VALIDATION (HALLUCINATION PREVENTION)
     # ==============================================================================
-    def test_validate_segments_removes_negative_duration(self):
+    def test_validate_segments_removes_negative_duration(self) -> None:
         """Ensures segments where end_time <= start_time are dropped."""
         segments = [
             {"label": "song", "start_time": "00:01:00.000", "end_time": "00:00:30.000"}, # Invalid
@@ -63,7 +77,7 @@ class TestAudioSegmentation(unittest.TestCase):
         self.assertEqual(len(valid), 1)
         self.assertEqual(valid[0]["label"], "speaking")
 
-    def test_validate_segments_allows_intentional_overlaps(self):
+    def test_validate_segments_allows_intentional_overlaps(self) -> None:
         """Ensures chained song interludes and speech bleed can safely overlap without being trimmed."""
         segments = [
             {"label": "song", "start_time": "00:01:00.000", "end_time": "00:05:30.000"},
@@ -75,7 +89,7 @@ class TestAudioSegmentation(unittest.TestCase):
         # The 5-minute start time should be preserved perfectly, NOT snapped to 05:30
         self.assertEqual(valid[1]["start_time"], "00:05:00.000")
 
-    def test_validate_segments_fixes_backwards_jumps(self):
+    def test_validate_segments_fixes_backwards_jumps(self) -> None:
         """Ensures that if the AI hallucinates a segment starting completely before the previous one, it snaps forward."""
         segments = [
             {"label": "sermon", "start_time": "00:10:00.000", "end_time": "00:45:00.000"},
@@ -90,8 +104,8 @@ class TestAudioSegmentation(unittest.TestCase):
     # ==============================================================================
     # 4. SUBPROCESS AND FILE I/O MOCKING
     # ==============================================================================
-    @patch('audio_segmentation.subprocess.run')
-    def test_compress_wav_to_mp3_subprocess_call(self, mock_run):
+    @patch('audio_segmentation.audio_segmentation.subprocess.run')
+    def test_compress_wav_to_mp3_subprocess_call(self, mock_run) -> None:
         """Verifies the FFmpeg compression command is structured correctly."""
         compress_wav_to_mp3("input.wav", "output.mp3")
         mock_run.assert_called_once()
@@ -101,25 +115,25 @@ class TestAudioSegmentation(unittest.TestCase):
         self.assertIn(FFMPEG_PATH, args)
         self.assertIn("-b:a", args)
         self.assertIn("64k", args)
-        self.assertIn("output.mp3", args[-1]) # Output file should be the last arg
+        self.assertIn("output.mp3", args[-1]) 
 
-    @patch('audio_segmentation.subprocess.run')
-    def test_slice_and_fade_ffmpeg_command_structure(self, mock_run):
-        """Verifies mathematical conversions for fast-seeking and crossfades."""
-        # Test 1000ms -> 5000ms with a 1000ms fade
-        slice_and_fade_ffmpeg("input.wav", "output.wav", 1000, 5000, 1000)
+    @patch('audio_segmentation.audio_segmentation.subprocess.run')
+    def test_slice_audio_ffmpeg_copy_command_structure(self, mock_run) -> None:
+        """Verifies correct parameters for fast-seeking and bit-perfect copying."""
+        slice_audio_ffmpeg_copy("input.wav", "output.wav", 1.000, 5.000)
         mock_run.assert_called_once()
         
         args = mock_run.call_args[0][0]
-        # start_ms = 1000 -> 1.000s
+        self.assertIn("-ss", args)
         self.assertIn("1.000", args)
-        # duration = 5000 - 1000 = 4000ms -> 4.000s
-        self.assertIn("4.000", args)
-        # Check if the audio filter (afade) parameter was built
-        self.assertTrue(any("afade" in arg for arg in args))
+        self.assertIn("-to", args)
+        self.assertIn("5.000", args)
+        # Ensure the stream copy codec is utilized
+        self.assertIn("-c:a", args)
+        self.assertIn("copy", args)
 
     @patch('builtins.open', new_callable=mock_open)
-    def test_generate_daw_locators_file_writing(self, mock_file):
+    def test_generate_daw_locators_file_writing(self, mock_file) -> None:
         """Verifies the text marker file is formatted correctly for DAW import in Live 12."""
         segments = [
             {"label": "song", "song_title": "Amazing Grace", "start_time": "00:00:01.000", "end_time": "00:01:00.000"}
