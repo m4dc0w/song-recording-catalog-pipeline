@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
+</head>
+<body>
+<div id="out"></div>
+<script>
+window.onload = function() {
+  const patch = Diff.createTwoFilesPatch('server.js', 'server.js', '', 'hello\nworld', '', '');
+  console.log("Patch:\n" + patch);
+  document.getElementById('out').innerText = patch;
+}
+</script>
+</body>
+</html>
