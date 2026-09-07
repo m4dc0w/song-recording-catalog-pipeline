@@ -105,7 +105,7 @@ python3 audio_segmentation.py
 
 ### What to Expect During Execution:
 
-1. **Compression:** The script generates a temporary, lightweight 64kbps MP3 preview of your master WAV to drastically reduce API upload times.
+1. **Compression:** The script generates a temporary, lightweight 192kbps MP3 preview of your master WAV to drastically reduce API upload times.
 2. **AI Analysis:** The MP3 is sent to Gemini. You will see the AI's internal "Self-Critique Log" printed to your terminal as it reasons through boundary overlaps.
 3. **Slicing:** FFmpeg executes precision cuts directly on your local disk.
 4. **Output:** Check your `PROCESSED_AUDIO_DIR` for the separated `.wav` files, the DAW Locator `.txt` file, and a text-based Segmentation Audit Report.
