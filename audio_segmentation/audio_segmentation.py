@@ -81,14 +81,15 @@ def time_to_ms(time_str: str) -> int:
 
 
 def compress_wav_to_mp3(input_wav: str, output_mp3: str) -> None:
-    """Creates a 64kbps mono MP3 preview to reduce upload bandwidth and API latency."""
+    """Creates a 192kbps stereo MP3 preview to reduce upload bandwidth and API latency."""
     print(f"Compressing raw WAV to 64kbps mono MP3 preview...")
     command = [
         FFMPEG_PATH, "-y",
         "-i", input_wav,
         "-codec:a", "libmp3lame",
-        "-b:a", "64k",
-        "-ac", "1",
+        "-b:a", "192k",    # Higher bit rate to preserve musical detail
+        "-ac", "2",        # Keep stereo channels for spatial segmentation cues
+        "-ar", "44100",    # Ensure full CD-quality frequency spectrum
         output_mp3
     ]
     subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
