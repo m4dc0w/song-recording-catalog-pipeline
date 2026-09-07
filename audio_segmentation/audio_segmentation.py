@@ -7,11 +7,13 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from core.schemas import ServicePlan
+
 # Load variables from .env file into the environment
 load_dotenv()
 
 # ==============================================================================
-# 1. PIPELINE CONFIGURATION
+# 1. PIPELINE CONFIGURATION & TUNING
 # ==============================================================================
 # Fetch storage paths dynamically from environment variables
 RAW_AUDIO_DIR = os.getenv("RAW_AUDIO_DIR")
@@ -33,14 +35,32 @@ if not RAW_AUDIO_DIR or not PROCESSED_AUDIO_DIR:
         "Please define RAW_AUDIO_DIR and PROCESSED_AUDIO_DIR in your .env file."
     )
 
+# --- Audio Extraction Tuning ---
+# Buffers added to AI-detected boundaries to capture natural acoustic room decay 
+# and provide sufficient overlap for downstream crossfading in the final render.
+SONG_PADDING_MS: int = 3000    # 3-second buffer for musical transitions
+SPEECH_PADDING_MS: int = 250   # Tight 250ms buffer for spoken word transitions
+
 # ==============================================================================
 # 2. HELPER FUNCTIONS: AUDIO & TIMESTAMPS
 # ==============================================================================
-def clean_filename(filename):
+def _format_setlist_for_ai(plan: ServicePlan) -> str:
+    """Formats the songs in a ServicePlan into a single string for the AI prompt."""
+    lines = []
+    for song in plan.songs:
+        if song.key:
+            lines.append(f"{song.title} ({song.key})")
+        else:
+            lines.append(song.title)
+    return "\n".join(lines)
+
+
+def clean_filename(filename: str) -> str:
     """Removes illegal OS filesystem characters from song titles."""
     return re.sub(r'[\\/*?:"<>|]', "", filename).strip()
 
-def time_to_ms(time_str):
+
+def time_to_ms(time_str: str) -> int:
     """Converts HH:MM:SS.f or MM:SS.f timestamp strings into integer milliseconds."""
     try:
         main_time, fraction = time_str.strip().split('.')
@@ -59,7 +79,8 @@ def time_to_ms(time_str):
         print(f"Error parsing timestamp '{time_str}': {e}")
         return 0
 
-def compress_wav_to_mp3(input_wav, output_mp3):
+
+def compress_wav_to_mp3(input_wav: str, output_mp3: str) -> None:
     """Creates a 64kbps mono MP3 preview to reduce upload bandwidth and API latency."""
     print(f"Compressing raw WAV to 64kbps mono MP3 preview...")
     command = [
@@ -72,7 +93,8 @@ def compress_wav_to_mp3(input_wav, output_mp3):
     ]
     subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
-def validate_segments(segments):
+
+def validate_segments(segments: list) -> list:
     """Sanitizes AI JSON output while permitting intentional musical overlaps."""
     valid_segments = []
     for i, seg in enumerate(segments):
@@ -95,25 +117,21 @@ def validate_segments(segments):
         valid_segments.append(seg)
     return valid_segments
 
-def slice_and_fade_ffmpeg(input_wav, output_wav, start_ms, end_ms, fade_ms):
-    """Slices audio directly on disk with fast seeking and linear crossfades."""
-    start_s = start_ms / 1000.0
-    duration_s = (end_ms - start_ms) / 1000.0
-    fade_s = fade_ms / 1000.0
-    fade_out_start = max(0, duration_s - fade_s)
 
+def slice_audio_ffmpeg_copy(input_wav: str, output_wav: str, start_s: float, end_s: float) -> None:
+    """Slices audio directly on disk using bit-perfect stream copy for maximum fidelity."""
     command = [
         FFMPEG_PATH, "-y",
         "-ss", f"{start_s:.3f}",
         "-i", input_wav,
-        "-t", f"{duration_s:.3f}",
-        "-af", f"afade=t=in:st=0:d={fade_s},afade=t=out:st={fade_out_start:.3f}:d={fade_s}",
-        "-c:a", "pcm_s16le",
+        "-to", f"{end_s:.3f}",
+        "-c:a", "copy",
         output_wav
     ]
     subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
-def generate_daw_locators(segments, output_dir, service_date):
+
+def generate_daw_locators(segments: list, output_dir: str, service_date: str) -> None:
     """Generates a tab-separated locator text file for visual timeline auditing in Live 12."""
     locator_path = os.path.join(output_dir, f"{service_date}_DAW_Locators.txt")
     with open(locator_path, 'w', encoding='utf-8') as f:
@@ -126,14 +144,20 @@ def generate_daw_locators(segments, output_dir, service_date):
 # ==============================================================================
 # 3. MAIN EXECUTION PIPELINE
 # ==============================================================================
-def process_service_pipeline(raw_wav_path, service_date, setlist_raw):
+def process_service_pipeline(plan: ServicePlan) -> None:
+    if not plan.raw_audio_filepath:
+        raise ValueError(f"Cannot process service for {plan.date}: 'raw_audio_filepath' is missing.")
+
+    if not os.path.exists(plan.raw_audio_filepath):
+        raise FileNotFoundError(f"Audio file not found at path: {plan.raw_audio_filepath}")
+
     # Setup Output Folder using the generalized PROCESSED_AUDIO_DIR
-    output_dir = os.path.join(PROCESSED_AUDIO_DIR, f"Output_{service_date}")
+    output_dir = os.path.join(PROCESSED_AUDIO_DIR, f"Output_{plan.date}")
     os.makedirs(output_dir, exist_ok=True)
     
     # Step A: Create Lightweight MP3 Preview
-    temp_mp3_path = f"temp_{service_date}.mp3"
-    compress_wav_to_mp3(raw_wav_path, temp_mp3_path)
+    temp_mp3_path = f"temp_{plan.date}.mp3"
+    compress_wav_to_mp3(plan.raw_audio_filepath, temp_mp3_path)
 
     # Step B: Initialize Gemini Client & Upload Preview File
     gemini_client = genai.Client()
@@ -179,8 +203,10 @@ def process_service_pipeline(raw_wav_path, service_date, setlist_raw):
         required=["step_1_audio_analysis", "step_2_self_critique", "final_segments"]
     )
 
+    setlist_str = _format_setlist_for_ai(plan)
+    
     prompt = f"""
-    Analyze this Sunday service recording for {service_date}.
+    Analyze this Sunday service recording for {plan.date}.
     Segment the entire file into: "song", "speaking", or "sermon".
     
     Note: Sometimes the recording may be a partial recording of the service, so the
@@ -240,7 +266,7 @@ def process_service_pipeline(raw_wav_path, service_date, setlist_raw):
        - NEGATIVE CONSTRAINT: Passionate preaching, praying, or reciting lyrics without musical accompaniment is NOT a song. Do not mislabel the sermon as an "Unlisted Song" or stretch a setlist track over it.
     
     <setlist>
-    {setlist_raw}
+    {setlist_str}
     </setlist>
     """
 
@@ -266,12 +292,12 @@ def process_service_pipeline(raw_wav_path, service_date, setlist_raw):
     segments = validate_segments(response_data.get('final_segments', []))
 
     # Step D: Generate DAW Locators
-    generate_daw_locators(segments, output_dir, service_date)
+    generate_daw_locators(segments, output_dir, plan.date)
 
     # Step E: Slice Master WAV File & Build Audit Report
     song_idx, speak_idx, sermon_idx = 1, 1, 1
     report_content = f"=====================================================\n"
-    report_content += f"AI AUDIO SEGMENTATION REPORT - SERVICE DATE: {service_date}\n"
+    report_content += f"AI AUDIO SEGMENTATION REPORT - SERVICE DATE: {plan.date}\n"
     report_content += f"=====================================================\n\n"
     
     # Append the AI's internal thoughts to the text report for auditing
@@ -287,26 +313,24 @@ def process_service_pipeline(raw_wav_path, service_date, setlist_raw):
         reason_text = seg.get('reason', 'N/A')
 
         if label == "song":
-            fade_ms = 3000
-            start_ms = max(0, target_start_ms - fade_ms)
-            end_ms = target_end_ms + fade_ms
+            start_ms = max(0, target_start_ms - SONG_PADDING_MS)
+            end_ms = target_end_ms + SONG_PADDING_MS
             
             raw_title = seg.get('song_title', '').strip()
             title = raw_title if raw_title else f"Worship Song {song_idx}"
-            filename = f"Song_{song_idx:02d}_{clean_filename(title)} - {service_date}.wav"
+            filename = f"Song_{song_idx:02d}_{clean_filename(title)} - {plan.date}.wav"
             report_content += f"TRACK {song_idx:02d}: {title}\n"
             song_idx += 1
         else:
-            fade_ms = 50
-            start_ms = max(0, target_start_ms - 250)
-            end_ms = target_end_ms + 250
+            start_ms = max(0, target_start_ms - SPEECH_PADDING_MS)
+            end_ms = target_end_ms + SPEECH_PADDING_MS
             
             if label == "sermon":
-                filename = f"Sermon_{sermon_idx:02d} - {service_date}.wav"
+                filename = f"Sermon_{sermon_idx:02d} - {plan.date}.wav"
                 report_content += f"SERMON {sermon_idx:02d}\n"
                 sermon_idx += 1
             else:
-                filename = f"Speaking_{speak_idx:02d} - {service_date}.wav"
+                filename = f"Speaking_{speak_idx:02d} - {plan.date}.wav"
                 report_content += f"SPEAKING {speak_idx:02d}\n"
                 speak_idx += 1
 
@@ -316,13 +340,18 @@ def process_service_pipeline(raw_wav_path, service_date, setlist_raw):
         report_content += f"-----------------------------------------------------\n\n"
 
         export_path = os.path.join(output_dir, filename)
-        slice_and_fade_ffmpeg(raw_wav_path, export_path, start_ms, end_ms, fade_ms)
+        
+        # Convert ms to seconds for the bit-perfect stream copy
+        start_s = start_ms / 1000.0
+        end_s = end_ms / 1000.0
+        
+        slice_audio_ffmpeg_copy(plan.raw_audio_filepath, export_path, start_s, end_s)
         
         # Formatted Terminal Output
         print(f"  Sliced: [{seg['start_time']} --> {seg['end_time']}] {filename}")
 
     # Write Audit Report File to Drive Folder
-    report_path = os.path.join(output_dir, f"Segmentation_Report_{service_date}.txt")
+    report_path = os.path.join(output_dir, f"Segmentation_Report_{plan.date}.txt")
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report_content)
 
@@ -337,29 +366,26 @@ def process_service_pipeline(raw_wav_path, service_date, setlist_raw):
 # Example Usage: python3 audio_segmentation.py
 # ==============================================================================
 if __name__ == "__main__":
+    from core.schemas import Song
     
-    RAW_WAV_FILENAME = "R_20260906-103109.wav"
-    SERVICE_DATE = "2026-09-06"  # This is the output folder name
-    SETLIST_DATA = """
-Glorious and Mighty
-Crown Him With Many Crowns
-And Can It Be
-All I Have Is Christ
-Holy, Holy, Holy
-    """
-    
-    RAW_WAV_INPUT_PATH = os.path.join(
-        RAW_AUDIO_DIR,
-        RAW_WAV_FILENAME
+    mock_plan = ServicePlan(
+        date="2026-09-06",
+        songs=[
+            Song(title="Glorious and Mighty"),
+            Song(title="Crown Him With Many Crowns"),
+            Song(title="And Can It Be"),
+            Song(title="All I Have Is Christ"),
+            Song(title="Holy, Holy, Holy")
+        ],
+        raw_audio_filepath=os.path.join(RAW_AUDIO_DIR, "R_20260906-103109.wav")
     )
     
     print("========PROCESSING========")
-    print(f"SERVICE_DATE: '{SERVICE_DATE}'")
-    print(f"RAW_WAV_INPUT_PATH: '{RAW_WAV_INPUT_PATH}'")
-    print(f"SETLIST_DATA: '''{SETLIST_DATA}'''")
+    print(f"SERVICE_DATE: '{mock_plan.date}'")
+    print(f"RAW_WAV_INPUT_PATH: '{mock_plan.raw_audio_filepath}'")
     print("==========================")
     
-    if os.path.exists(RAW_WAV_INPUT_PATH):
-        process_service_pipeline(RAW_WAV_INPUT_PATH, SERVICE_DATE, SETLIST_DATA)
+    if os.path.exists(mock_plan.raw_audio_filepath):
+        process_service_pipeline(mock_plan)
     else:
-        print(f"Please specify a valid path to your input WAV file. '{RAW_WAV_INPUT_PATH}' not found.")
+        print(f"Please specify a valid path to your input WAV file. '{mock_plan.raw_audio_filepath}' not found.")
