@@ -225,3 +225,10 @@ __marimo__/
 
 # Video Files (Prevent pushing massive files to GitHub)
 *.mp4
+*.mov
+*.mkv
+*.avi
+*.wmv
+*.flv
+*.webm
+*.m4v
