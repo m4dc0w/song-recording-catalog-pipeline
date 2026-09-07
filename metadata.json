@@ -1,0 +1,6 @@
+{
+  "name": "Song Recording Catalog Pipeline",
+  "description": "Audio segmentation and cataloging pipeline syncing with Planning Center and Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
