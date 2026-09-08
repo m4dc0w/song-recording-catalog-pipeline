@@ -43,5 +43,50 @@ class TestMoveSongs(unittest.TestCase):
             self.assertEqual(f.read(), "old_content")
         self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Existing.wav")))
 
+    def test_move_songs_filter_by_target_date(self):
+        # Create files for different dates
+        with open(os.path.join(self.src_dir, "Amazing Grace - 2026-09-06.wav"), 'w') as f:
+            f.write("content1")
+        with open(os.path.join(self.src_dir, "How Great - 2026-09-13.wav"), 'w') as f:
+            f.write("content2")
+
+        move_songs(self.src_dir, self.dest_dir, target_date="2026-09-06")
+
+        # 2026-09-06 should be moved
+        self.assertTrue(os.path.exists(os.path.join(self.dest_dir, "Amazing Grace - 2026-09-06.wav")))
+        self.assertFalse(os.path.exists(os.path.join(self.src_dir, "Amazing Grace - 2026-09-06.wav")))
+
+        # 2026-09-13 should remain in source
+        self.assertFalse(os.path.exists(os.path.join(self.dest_dir, "How Great - 2026-09-13.wav")))
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "How Great - 2026-09-13.wav")))
+
+    def test_move_songs_filter_by_date_range(self):
+        with open(os.path.join(self.src_dir, "Song A - 2026-08-20.wav"), 'w') as f:
+            f.write("a")
+        with open(os.path.join(self.src_dir, "Song B - 2026-09-06.wav"), 'w') as f:
+            f.write("b")
+        with open(os.path.join(self.src_dir, "Song C - 2026-10-01.wav"), 'w') as f:
+            f.write("c")
+
+        move_songs(self.src_dir, self.dest_dir, start_date="2026-09-01", end_date="2026-09-30")
+
+        self.assertFalse(os.path.exists(os.path.join(self.dest_dir, "Song A - 2026-08-20.wav")))
+        self.assertTrue(os.path.exists(os.path.join(self.dest_dir, "Song B - 2026-09-06.wav")))
+        self.assertFalse(os.path.exists(os.path.join(self.dest_dir, "Song C - 2026-10-01.wav")))
+
+        # Unmatched files remain in source
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Song A - 2026-08-20.wav")))
+        self.assertFalse(os.path.exists(os.path.join(self.src_dir, "Song B - 2026-09-06.wav")))
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Song C - 2026-10-01.wav")))
+
+    def test_move_songs_no_match(self):
+        with open(os.path.join(self.src_dir, "Song A - 2026-08-20.wav"), 'w') as f:
+            f.write("a")
+
+        move_songs(self.src_dir, self.dest_dir, target_date="2026-09-06")
+
+        self.assertFalse(os.path.exists(os.path.join(self.dest_dir, "Song A - 2026-08-20.wav")))
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Song A - 2026-08-20.wav")))
+
 if __name__ == '__main__':
     unittest.main()

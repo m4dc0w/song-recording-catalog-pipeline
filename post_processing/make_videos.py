@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import subprocess
 import json
@@ -5,11 +7,23 @@ import shutil
 import tempfile
 import textwrap
 import wave
+from pathlib import Path
+from typing import Optional
+from post_processing.copy_songs import extract_date_from_file, parse_date_str
 
-def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "assets/images/background.png", ffmpeg_path: str = "ffmpeg") -> None:
+def make_videos(
+    src_dir: str, 
+    dest_dir: str, 
+    bg_image_path: str = "assets/images/background.png", 
+    ffmpeg_path: str = "ffmpeg",
+    target_date: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+) -> None:
     """
-    Generates video files for each .wav file in the source directory using a two-pass
+    Generates video files for each matching .wav file in the source directory using a two-pass
     loudnorm audio normalization and an image background overlay.
+    Optionally filters by target_date (YYYY-MM-DD) or date range (start_date to end_date).
     """
     if not os.path.exists(src_dir):
         print(f"❌ Error: Source directory does not exist: {src_dir}")
@@ -21,6 +35,11 @@ def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "assets/images
 
     os.makedirs(dest_dir, exist_ok=True)
     
+    if target_date:
+        print(f"Filtering for date: {target_date}")
+    elif start_date and end_date:
+        print(f"Filtering for timeframe: {start_date} to {end_date} (inclusive)")
+
     # Get all .wav files in the verified directory
     wav_files = [f for f in os.listdir(src_dir) if f.lower().endswith(".wav")]
     
@@ -28,9 +47,35 @@ def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "assets/images
         print(f"No .wav files found in {src_dir}.")
         return
 
-    print(f"Found {len(wav_files)} audio files. Generating videos...")
+    target_dt = parse_date_str(target_date)
+    start_dt = parse_date_str(start_date)
+    end_dt = parse_date_str(end_date)
 
-    for audio_file in wav_files:
+    src_path = Path(src_dir)
+    filtered_wav_files = []
+    for audio_file in sorted(wav_files):
+        file_path = src_path / audio_file
+        file_dt = extract_date_from_file(file_path, src_path)
+
+        if target_dt is not None:
+            if file_dt is None or file_dt.date() != target_dt.date():
+                continue
+        elif start_dt is not None and end_dt is not None:
+            if file_dt is None or not (start_dt.date() <= file_dt.date() <= end_dt.date()):
+                continue
+
+        filtered_wav_files.append(audio_file)
+
+    if not filtered_wav_files:
+        if target_dt or (start_dt and end_dt):
+            print(f"No .wav files matching the specified date(s) found in {src_dir}.")
+        else:
+            print(f"No .wav files found in {src_dir}.")
+        return
+
+    print(f"Found {len(filtered_wav_files)} audio files. Generating videos...")
+
+    for audio_file in filtered_wav_files:
         song_title = os.path.splitext(audio_file)[0]
         full_audio_path = os.path.join(src_dir, audio_file)
         output_file = os.path.join(dest_dir, f"{song_title}.mp4")

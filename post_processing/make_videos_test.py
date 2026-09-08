@@ -83,5 +83,69 @@ class TestMakeVideos(unittest.TestCase):
             make_videos(self.src_dir, self.dest_dir, bg_image_path=self.bg_image)
             mock_subprocess.assert_not_called()
 
+    @patch('subprocess.run')
+    def test_make_videos_filter_by_target_date(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stderr = 'some log text { "input_i": "-20.0", "input_tp": "-2.0", "input_lra": "5.0", "input_thresh": "-30.0", "target_offset": "0.5" } end log'
+        mock_subprocess.return_value = mock_result
+
+        self.create_dummy_wav(os.path.join(self.src_dir, "Song A - 2026-09-06.wav"))
+        self.create_dummy_wav(os.path.join(self.src_dir, "Song B - 2026-09-13.wav"))
+
+        make_videos(
+            self.src_dir, 
+            self.dest_dir, 
+            bg_image_path=self.bg_image, 
+            ffmpeg_path="ffmpeg",
+            target_date="2026-09-06"
+        )
+
+        # 2 calls per processed audio file (pass 1 and pass 2)
+        self.assertEqual(mock_subprocess.call_count, 2)
+        pass2_call = mock_subprocess.call_args_list[1][0][0]
+        pass2_cmd_str = " ".join(pass2_call)
+        self.assertIn("Song A - 2026-09-06.wav", pass2_cmd_str)
+        self.assertNotIn("Song B - 2026-09-13.wav", pass2_cmd_str)
+
+    @patch('subprocess.run')
+    def test_make_videos_filter_by_date_range(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stderr = 'some log text { "input_i": "-20.0", "input_tp": "-2.0", "input_lra": "5.0", "input_thresh": "-30.0", "target_offset": "0.5" } end log'
+        mock_subprocess.return_value = mock_result
+
+        self.create_dummy_wav(os.path.join(self.src_dir, "Song A - 2026-08-20.wav"))
+        self.create_dummy_wav(os.path.join(self.src_dir, "Song B - 2026-09-06.wav"))
+        self.create_dummy_wav(os.path.join(self.src_dir, "Song C - 2026-10-01.wav"))
+
+        make_videos(
+            self.src_dir, 
+            self.dest_dir, 
+            bg_image_path=self.bg_image, 
+            ffmpeg_path="ffmpeg",
+            start_date="2026-09-01",
+            end_date="2026-09-30"
+        )
+
+        self.assertEqual(mock_subprocess.call_count, 2)
+        pass2_call = mock_subprocess.call_args_list[1][0][0]
+        pass2_cmd_str = " ".join(pass2_call)
+        self.assertIn("Song B - 2026-09-06.wav", pass2_cmd_str)
+        self.assertNotIn("Song A - 2026-08-20.wav", pass2_cmd_str)
+        self.assertNotIn("Song C - 2026-10-01.wav", pass2_cmd_str)
+
+    @patch('subprocess.run')
+    def test_make_videos_no_matching_date(self, mock_subprocess):
+        self.create_dummy_wav(os.path.join(self.src_dir, "Song A - 2026-08-20.wav"))
+
+        make_videos(
+            self.src_dir, 
+            self.dest_dir, 
+            bg_image_path=self.bg_image, 
+            ffmpeg_path="ffmpeg",
+            target_date="2026-09-06"
+        )
+
+        mock_subprocess.assert_not_called()
+
 if __name__ == '__main__':
     unittest.main()

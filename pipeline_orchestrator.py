@@ -54,18 +54,21 @@ def prompt_for_service_type() -> str:
             print("Please enter a valid number.")
 
 
-def prompt_for_staging_dates() -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """Prompts the user for date filtering options when staging songs.
+def prompt_for_date_filter(
+    title: str = "Date Filter for Post-Processing",
+    all_label: str = "all songs"
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Prompts the user for date filtering options during post-processing.
     
     Returns:
         tuple[Optional[str], Optional[str], Optional[str]]:
             (target_date, start_date, end_date)
     """
-    print("\n📅 Date Filter for Staging Songs:")
+    print(f"\n📅 {title}:")
     print("-" * 40)
     print("  [1] Single service date (YYYY-MM-DD)")
     print("  [2] Date range (Start Date & End Date)")
-    print("  [3] All dates (stage all songs)")
+    print(f"  [3] All dates ({all_label})")
     print("-" * 40)
     while True:
         try:
@@ -188,22 +191,22 @@ def main(cli_args: Optional[List[str]] = None) -> None:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Stage all songs across all dates without prompting for date filtering."
+        help="Process all songs across all dates without prompting for date filtering during post-processing."
     )
     parser.add_argument(
         "--publish-staging",
         action="store_true",
-        help="Run post-processing to copy and stage songs from the processed directory to the staging directory."
+        help="Run post-processing to copy and stage songs from the processed directory to the staging directory (prompts for dates if omitted)."
     )
     parser.add_argument(
         "--publish-verified",
         action="store_true",
-        help="Run post-processing to move verified songs from the staging directory to the verified directory."
+        help="Run post-processing to move verified songs from the staging directory to the verified directory (prompts for dates if omitted)."
     )
     parser.add_argument(
         "--make-videos",
         action="store_true",
-        help="Run post-processing to generate MP4 videos from the verified audio recordings."
+        help="Run post-processing to generate MP4 videos from the verified audio recordings (prompts for dates if omitted)."
     )
     parser.add_argument(
         "--skip-post-processing",
@@ -325,33 +328,46 @@ def main(cli_args: Optional[List[str]] = None) -> None:
                     print("Exiting pipeline to avoid accidentally publishing verified songs.")
                     return
         
+        # Initialize post-processing date filters from CLI args or locked target_date
+        post_proc_target_date = target_date
+        post_proc_start_date = args.start_date
+        post_proc_end_date = args.end_date
+        post_proc_all = getattr(args, 'all', False)
+
+        def resolve_post_proc_dates(title: str, all_label: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
+            nonlocal post_proc_target_date, post_proc_start_date, post_proc_end_date, post_proc_all
+            if (
+                not post_proc_target_date 
+                and not post_proc_start_date 
+                and not post_proc_end_date 
+                and not post_proc_all
+            ):
+                post_proc_target_date, post_proc_start_date, post_proc_end_date = prompt_for_date_filter(
+                    title=title,
+                    all_label=all_label
+                )
+                if not post_proc_target_date and not post_proc_start_date and not post_proc_end_date:
+                    post_proc_all = True
+            return post_proc_target_date, post_proc_start_date, post_proc_end_date
+
         # 5. Post-Processing: Stage Songs
         if args.publish_staging:
             print("\n" + "=" * 50)
             print("📦 Post-Processing: Staging Songs")
             print("=" * 50)
             
-            staging_target_date = target_date
-            staging_start_date = args.start_date
-            staging_end_date = args.end_date
-
-            # If no dates were provided in CLI args and not locked during interactive run,
-            # default to prompting the user for dates unless --all is specified.
-            if (
-                not staging_target_date 
-                and not staging_start_date 
-                and not staging_end_date 
-                and not getattr(args, 'all', False)
-            ):
-                staging_target_date, staging_start_date, staging_end_date = prompt_for_staging_dates()
+            p_target, p_start, p_end = resolve_post_proc_dates(
+                title="Date Filter for Staging Songs",
+                all_label="stage all songs"
+            )
 
             # Copy to staging directory (scoped to target date or timeframe if provided)
             copy_songs(
                 PROCESSED_AUDIO_DIR, 
                 STAGING_AUDIO_DIR, 
-                target_date=staging_target_date, 
-                start_date=staging_start_date, 
-                end_date=staging_end_date
+                target_date=p_target, 
+                start_date=p_start, 
+                end_date=p_end
             )
             print(f"\n🎧 Songs have been successfully staged in: {STAGING_AUDIO_DIR}")
 
@@ -361,11 +377,22 @@ def main(cli_args: Optional[List[str]] = None) -> None:
             print("🚚 Post-Processing: Publishing Verified Songs")
             print("=" * 50)
             
+            p_target, p_start, p_end = resolve_post_proc_dates(
+                title="Date Filter for Publishing Verified Songs",
+                all_label="move all verified songs"
+            )
+
             choice = input("Have you verified the recordings are good enough to move to the VERIFIED_AUDIO_DIR? (y/n): ")
             
             if choice.strip().lower() == 'y':
                 print("\n🚚 Moving songs to verified directory...")
-                move_songs(STAGING_AUDIO_DIR, VERIFIED_AUDIO_DIR)
+                move_songs(
+                    STAGING_AUDIO_DIR, 
+                    VERIFIED_AUDIO_DIR,
+                    target_date=p_target,
+                    start_date=p_start,
+                    end_date=p_end
+                )
             else:
                 print("\n⏸️ Skipping move to verified directory. They remain in staging.")
                 print("Exiting pipeline to allow audio verification before generating videos.")
@@ -376,7 +403,20 @@ def main(cli_args: Optional[List[str]] = None) -> None:
             print("\n" + "=" * 50)
             print("🎬 Post-Processing: Generating Videos")
             print("=" * 50)
-            make_videos(VERIFIED_AUDIO_DIR, VIDEOS_DIR, ffmpeg_path=FFMPEG_PATH)
+            
+            p_target, p_start, p_end = resolve_post_proc_dates(
+                title="Date Filter for Video Generation",
+                all_label="generate videos for all songs"
+            )
+
+            make_videos(
+                VERIFIED_AUDIO_DIR, 
+                VIDEOS_DIR, 
+                ffmpeg_path=FFMPEG_PATH,
+                target_date=p_target,
+                start_date=p_start,
+                end_date=p_end
+            )
             
         print("\n🎉 Pipeline completed successfully!")
         

@@ -113,20 +113,47 @@ Strips the AI numbering prefix (e.g., `Song_01_`) and safely copies files from `
   ```
 
 **Publish Verified Songs:**
-Prompts you to confirm if the recordings in `STAGING_AUDIO_DIR` have been manually verified. If you type 'y', it securely moves them into your `VERIFIED_AUDIO_DIR` without overwriting existing files:
-```bash
-python3 pipeline_orchestrator.py --publish-verified
-```
+Prompts you to confirm if the recordings in `STAGING_AUDIO_DIR` have been manually verified. If you type 'y', it securely moves them into your `VERIFIED_AUDIO_DIR` without overwriting existing files.
+- **Interactive Date Prompt (Default):** Prompts for date filter options (single date, date range, or all songs) if no date arguments are provided.
+- Standalone execution:
+  ```bash
+  python3 pipeline_orchestrator.py --publish-verified
+  ```
+- Scoped to a specific date or date range:
+  ```bash
+  python3 pipeline_orchestrator.py --publish-verified --date "2026-09-06"
+  python3 pipeline_orchestrator.py --publish-verified --start-date "2026-08-01" --end-date "2026-08-31"
+  ```
+- To move all verified songs without prompting for dates:
+  ```bash
+  python3 pipeline_orchestrator.py --publish-verified --all
+  ```
 
 **Generate Videos:**
-Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and generates OLED-safe, multiline text `.mp4` videos using a default `assets/images/background.png`. It uses a 2-pass FFmpeg `loudnorm` filter (I=-14, TP=-1) to guarantee perfect normalization for YouTube/Social Media:
-```bash
-python3 pipeline_orchestrator.py --make-videos
-```
+Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and generates OLED-safe, multiline text `.mp4` videos using a default `assets/images/background.png`. It uses a 2-pass FFmpeg `loudnorm` filter (I=-14, TP=-1) to guarantee perfect normalization for YouTube/Social Media.
+- **Interactive Date Prompt (Default):** Prompts for date filter options (single date, date range, or all songs) if no date arguments are provided.
+- Standalone execution:
+  ```bash
+  python3 pipeline_orchestrator.py --make-videos
+  ```
+- Scoped to a specific date or date range:
+  ```bash
+  python3 pipeline_orchestrator.py --make-videos --date "2026-09-06"
+  python3 pipeline_orchestrator.py --make-videos --start-date "2026-08-01" --end-date "2026-08-31"
+  ```
+- To generate videos for all songs without prompting for dates:
+  ```bash
+  python3 pipeline_orchestrator.py --make-videos --all
+  ```
 
-**Run All Post-Processing Stages Simultaneously:**
+**Run Combined Post-Processing Stages:**
+When running multiple post-processing flags together without CLI date args, the orchestrator prompts for the date filter once and applies it across all selected stages:
 ```bash
+# Prompts for dates once, stages songs, asks verification, and renders videos:
 python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos
+
+# Or process all songs across all stages without date prompting:
+python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos --all
 ```
 
 *(Note: Ensure an image exists at `assets/images/background.png` or specify a custom path in the code for video generation to work.)*

@@ -160,7 +160,12 @@ def main(cli_args: Optional[List[str]] = None) -> None:
             choice = input("Have you verified the recordings are good enough to move to the VERIFIED_AUDIO_DIR? (y/n): ")
             if choice.strip().lower() == 'y':
                 print("\n🚚 Moving songs to verified directory...")
-                move_songs(STAGING_AUDIO_DIR, VERIFIED_AUDIO_DIR)
+                move_songs(
+                    STAGING_AUDIO_DIR, 
+                    VERIFIED_AUDIO_DIR,
+                    start_date=start_date_str,
+                    end_date=end_date_str
+                )
             else:
                 print("\n⏸️ Skipping move to verified directory. They remain in staging.")
                 print("Exiting pipeline to allow audio verification before generating videos.")
@@ -170,7 +175,13 @@ def main(cli_args: Optional[List[str]] = None) -> None:
             print("\n" + "=" * 60)
             print("🎬 Post-Processing: Generating Videos")
             print("=" * 60)
-            make_videos(VERIFIED_AUDIO_DIR, VIDEOS_DIR, ffmpeg_path=FFMPEG_PATH)
+            make_videos(
+                VERIFIED_AUDIO_DIR, 
+                VIDEOS_DIR, 
+                ffmpeg_path=FFMPEG_PATH,
+                start_date=start_date_str,
+                end_date=end_date_str
+            )
 
         print("\n🎉 Post-processing completed successfully!")
         return
@@ -272,7 +283,12 @@ def main(cli_args: Optional[List[str]] = None) -> None:
         choice = input("Have you verified the recordings are good enough to move to the VERIFIED_AUDIO_DIR? (y/n): ")
         if choice.strip().lower() == 'y':
             print("\n🚚 Moving songs to verified directory...")
-            move_songs(STAGING_AUDIO_DIR, VERIFIED_AUDIO_DIR)
+            move_songs(
+                STAGING_AUDIO_DIR, 
+                VERIFIED_AUDIO_DIR,
+                start_date=start_date_str,
+                end_date=end_date_str
+            )
         else:
             print("\n⏸️ Skipping move to verified directory. They remain in staging.")
             print("Exiting pipeline to allow audio verification before generating videos.")
@@ -282,7 +298,13 @@ def main(cli_args: Optional[List[str]] = None) -> None:
         print("\n" + "=" * 60)
         print("🎬 Post-Processing: Generating Videos")
         print("=" * 60)
-        make_videos(VERIFIED_AUDIO_DIR, VIDEOS_DIR, ffmpeg_path=FFMPEG_PATH)
+        make_videos(
+            VERIFIED_AUDIO_DIR, 
+            VIDEOS_DIR, 
+            ffmpeg_path=FFMPEG_PATH,
+            start_date=start_date_str,
+            end_date=end_date_str
+        )
             
 if __name__ == "__main__":
     main()
