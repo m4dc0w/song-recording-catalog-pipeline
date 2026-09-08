@@ -21,7 +21,7 @@ def copy_verified_songs(src_dir: str, dest_dir: str) -> None:
 
     # Use glob to find all matching files recursively
     # glob with recursive=True requires **
-    search_pattern = os.path.join(src_dir, "**", "Song_[0-9][0-9]_*.wav")
+    search_pattern = os.path.join(src_dir, "**", "Song_\d+_*.wav")
     matched_files = glob.glob(search_pattern, recursive=True)
     
     if not matched_files:
@@ -29,7 +29,7 @@ def copy_verified_songs(src_dir: str, dest_dir: str) -> None:
         return
 
     copied_count = 0
-    pattern = re.compile(r"^Song_\d\d_")
+    pattern = re.compile(r"^Song_\d+_")
 
     for file_path in matched_files:
         base_name = os.path.basename(file_path)
