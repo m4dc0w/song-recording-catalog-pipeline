@@ -4,8 +4,8 @@ An end-to-end Python orchestration pipeline for music ministries and churches. T
 
 ## 🚀 Pipeline Features
 
-1. **Planning Center Integration:** Automatically fetches recent service plans and setlists via the PCO API, eliminating manual data entry.
-2. **Automated Audio Discovery:** Scans your raw recordings folder to automatically find the matching `.wav` file for a selected service date.
+1. **Planning Center Integration:** Automatically fetches recent or historical service plans and setlists via the PCO API with date-aware query filtering, eliminating manual data entry.
+2. **Automated Audio Discovery & Multi-Recording Support:** Scans your raw recordings folder to automatically find all matching `.wav` files for a service date, intelligently skipping already-processed folders and segmenting only missing recordings.
 3. **Multimodal AI Segmentation:** Leverages the latest Gemini Flash models with a strict "Self-Critique" loop to dynamically listen to the audio, avoid speech-bleed, and map precise timestamps for every song in the setlist.
 4. **Precision FFmpeg Slicing:** Automatically applies 3-second crossfades and cuts the master `.wav` file into pristine, individual tracks.
 5. **DAW Ready:** Generates tab-separated locator markers for seamless import into DAWs like Ableton Live.
@@ -76,13 +76,19 @@ python3 pipeline_orchestrator.py
   8. **Post-Processing (Generate Videos):** Renders OLED-safe, loudness-normalized MP4 videos into `VIDEOS_DIR`.
 
 *Fine-Grained Controls & Overrides:*
-You can specify a date or date range to run segmentation only (interactively selecting the service type and plan without needing to look up IDs), bypass all menus for headless automation, or isolate specific stages:
+You can specify a date or date range to run segmentation only (interactively selecting the service type and plan without needing to look up IDs), adjust API query limits, bypass all menus for headless automation, or isolate specific stages:
 ```bash
 # Run segmentation only for a specific date (prompts to select service type and plan):
 python3 pipeline_orchestrator.py --date "2026-09-06"
 
+# Run segmentation for a historical date (uses date-aware Planning Center query filtering):
+python3 pipeline_orchestrator.py --date "2024-11-17"
+
 # Run segmentation only for a date range (prompts to select plan(s) in range):
 python3 pipeline_orchestrator.py --start-date "2026-08-01" --end-date "2026-08-31"
+
+# Adjust the maximum number of plans fetched from Planning Center (defaults to 50 recent, 100 for date queries):
+python3 pipeline_orchestrator.py --date "2024-11-17" --limit 150
 
 # Advanced: Run segmentation headlessly (bypasses all prompts):
 python3 pipeline_orchestrator.py --service-type "987654" --plan-id "123456" --date "2026-09-06"
@@ -93,6 +99,9 @@ python3 pipeline_orchestrator.py --skip-post-processing
 # Run segmentation for a specific audio file (with explicit post-processing)
 python3 pipeline_orchestrator.py --audio-file "R_20260906-103109.wav" --publish-staging --publish-verified --make-videos
 ```
+
+*Multiple Audio Recordings per Date:*
+When a service date matches multiple raw `.wav` recordings (e.g., split recordings or morning/evening sessions), the orchestrator iterates through all discovered files. Any recording whose destination output folder already exists and is non-empty is safely skipped, allowing the pipeline to continue and process any remaining missing recordings.
 
 ### 2. Post-Processing: Publishing & Video Generation
 
@@ -182,8 +191,8 @@ python3 pipeline_orchestrator_backfill.py
 
 *Optional Overrides & In-Line Post-Processing:*
 ```bash
-# Backfill with automatic staging scoped strictly to the backfill timeframe (inclusive)
-python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging
+# Backfill with custom plan limit and automatic staging scoped strictly to the backfill timeframe (inclusive)
+python3 pipeline_orchestrator_backfill.py --start-date "2024-01-01" --end-date "2024-12-31" --limit 200 --publish-staging
 
 # Full end-to-end backfill with staging, verification prompt, and video rendering
 python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging --publish-verified --make-videos
@@ -211,7 +220,7 @@ python3 pipeline_orchestrator.py --publish-verified --make-videos
 
 ## 🧪 Testing
 
-The project includes a robust unit testing suite (50+ tests) covering API interactions, timestamp math, string sanitization, hallucination prevention logic, file operations, and dynamic FFmpeg command construction.
+The project includes a robust unit testing suite (100+ tests) covering API interactions, timestamp math, string sanitization, hallucination prevention logic, file operations, and dynamic FFmpeg command construction.
 
 To run the entire test suite across the repository, use the included test runner:
 ```bash
