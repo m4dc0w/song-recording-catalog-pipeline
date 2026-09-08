@@ -118,12 +118,41 @@ class TestPipelineOrchestrator(unittest.TestCase):
     def test_main_post_processing(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
         mock_input.return_value = "y"
         
-        pipeline_orchestrator.main(["--service-type", "123", "--publish-verified", "--make-videos"])
+        pipeline_orchestrator.main(["--service-type", "123", "--publish-staging", "--publish-verified", "--make-videos"])
         
         mock_prompt_plan.assert_not_called()
         mock_copy_songs.assert_called_once()
         mock_move_songs.assert_called_once()
         mock_make_videos.assert_called_once()
+
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    def test_main_post_processing_staging_only(self, mock_prompt_plan, mock_make_videos, mock_move_songs, mock_copy_songs):
+        """When --publish-staging is passed alone, only copy_songs is called and verified move is skipped."""
+        pipeline_orchestrator.main(["--service-type", "123", "--publish-staging"])
+        
+        mock_prompt_plan.assert_not_called()
+        mock_copy_songs.assert_called_once()
+        mock_move_songs.assert_not_called()
+        mock_make_videos.assert_not_called()
+
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    @patch('pipeline_orchestrator.input')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    def test_main_post_processing_publish_verified_only(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
+        """When --publish-verified is passed alone, copy_songs is skipped and only verified move is performed upon confirmation."""
+        mock_input.return_value = "y"
+        
+        pipeline_orchestrator.main(["--service-type", "123", "--publish-verified"])
+        
+        mock_prompt_plan.assert_not_called()
+        mock_copy_songs.assert_not_called()
+        mock_move_songs.assert_called_once()
+        mock_make_videos.assert_not_called()
 
     @patch('pipeline_orchestrator.copy_songs')
     @patch('pipeline_orchestrator.move_songs')
@@ -134,7 +163,7 @@ class TestPipelineOrchestrator(unittest.TestCase):
         """When the user does not enter 'y' to verify songs, move_songs and make_videos must not be executed."""
         mock_input.return_value = "n"
         
-        pipeline_orchestrator.main(["--service-type", "123", "--publish-verified", "--make-videos"])
+        pipeline_orchestrator.main(["--service-type", "123", "--publish-staging", "--publish-verified", "--make-videos"])
         
         mock_prompt_plan.assert_not_called()
         mock_copy_songs.assert_called_once()

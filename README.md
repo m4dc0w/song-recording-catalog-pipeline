@@ -71,8 +71,9 @@ python3 pipeline_orchestrator.py
   3. Automatically discovers the matching raw audio file in `RAW_AUDIO_DIR`.
   4. Generates an MP3 preview and uses Gemini AI to determine precise song timestamps.
   5. Slices the audio into individual tracks inside `PROCESSED_AUDIO_DIR`.
-  6. **Post-Processing (Publish Verified):** Stages the songs into `STAGING_AUDIO_DIR` and interactively prompts you to confirm moving them to `VERIFIED_AUDIO_DIR`.
-  7. **Post-Processing (Generate Videos):** Renders OLED-safe, loudness-normalized MP4 videos into `VIDEOS_DIR`.
+  6. **Post-Processing (Stage Songs):** Copies and stages songs into `STAGING_AUDIO_DIR` (stripping the `Song_XX_` prefix).
+  7. **Post-Processing (Publish Verified):** Prompts you to confirm moving verified tracks from `STAGING_AUDIO_DIR` to `VERIFIED_AUDIO_DIR`.
+  8. **Post-Processing (Generate Videos):** Renders OLED-safe, loudness-normalized MP4 videos into `VIDEOS_DIR`.
 
 *Fine-Grained Controls & Overrides:*
 You can bypass the interactive menu for headless automation, skip post-processing, or isolate specific stages:
@@ -84,28 +85,34 @@ python3 pipeline_orchestrator.py --service-type "987654" --plan-id "123456" --da
 python3 pipeline_orchestrator.py --skip-post-processing
 
 # Run segmentation for a specific audio file (with explicit post-processing)
-python3 pipeline_orchestrator.py --audio-file "R_20260906-103109.wav" --publish-verified --make-videos
+python3 pipeline_orchestrator.py --audio-file "R_20260906-103109.wav" --publish-staging --publish-verified --make-videos
 ```
 
 ### 2. Post-Processing: Publishing & Video Generation
 
-After the AI segments the audio, you may want to manually listen to the tracks. Once you are satisfied, you can run the orchestrator in **Post-Processing Mode** to prepare them for publication.
+After the AI segments the audio, you can run post-processing steps individually or combined to stage, verify, and generate videos.
+
+**Stage Songs:**
+Strips the AI numbering prefix (e.g., `Song_01_`) and safely copies the files from `PROCESSED_AUDIO_DIR` to your staging area (`STAGING_AUDIO_DIR`):
+```bash
+python3 pipeline_orchestrator.py --publish-staging
+```
 
 **Publish Verified Songs:**
-Strips the AI numbering prefix (e.g., `Song_01_`) and safely copies the files to a staging area (`STAGING_AUDIO_DIR`). The script will then interactively prompt you to confirm if they have been manually verified. If you type 'y', it securely moves them into your `VERIFIED_AUDIO_DIR` without overwriting existing files.
+Prompts you to confirm if the recordings in `STAGING_AUDIO_DIR` have been manually verified. If you type 'y', it securely moves them into your `VERIFIED_AUDIO_DIR` without overwriting existing files:
 ```bash
 python3 pipeline_orchestrator.py --publish-verified
 ```
 
 **Generate Videos:**
-Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and generates OLED-safe, multiline text `.mp4` videos using a default `assets/images/background.png`. It uses a 2-pass FFmpeg `loudnorm` filter (I=-14, TP=-1) to guarantee perfect normalization for YouTube/Social Media.
+Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and generates OLED-safe, multiline text `.mp4` videos using a default `assets/images/background.png`. It uses a 2-pass FFmpeg `loudnorm` filter (I=-14, TP=-1) to guarantee perfect normalization for YouTube/Social Media:
 ```bash
 python3 pipeline_orchestrator.py --make-videos
 ```
 
-**Run Both Simultaneously:**
+**Run All Post-Processing Stages Simultaneously:**
 ```bash
-python3 pipeline_orchestrator.py --publish-verified --make-videos
+python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos
 ```
 
 *(Note: Ensure an image exists at `assets/images/background.png` or specify a custom path in the code for video generation to work.)*
@@ -139,6 +146,10 @@ python3 -u pipeline_orchestrator_backfill.py 2>&1 | tee tmp/backfill_report.txt
 * **Next Steps After Backfill:**
 Once backfilling is complete and you have verified the sliced audio files in `PROCESSED_AUDIO_DIR`, proceed to **[Post-Processing: Publishing & Video Generation](#2-post-processing-publishing--video-generation)** to stage, verify, and generate videos for the entire batch:
 ```bash
+# Stage the segmented songs:
+python3 pipeline_orchestrator.py --publish-staging
+
+# After listening and verifying in STAGING_AUDIO_DIR, publish and generate videos:
 python3 pipeline_orchestrator.py --publish-verified --make-videos
 ```
 

@@ -159,7 +159,7 @@ def main() -> None:
     if success_count > 0:
         print("\n💡 Next Steps (Post-Processing):")
         print("To stage, verify, and generate videos for your segmented songs, run:")
-        print("  python3 pipeline_orchestrator.py --publish-verified --make-videos")
+        print("  python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos")
             
 if __name__ == "__main__":
     main()

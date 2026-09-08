@@ -116,9 +116,14 @@ def main(cli_args=None) -> None:
     
     # Post-Processing Arguments
     parser.add_argument(
+        "--publish-staging",
+        action="store_true",
+        help="Run post-processing to copy and stage songs from the processed directory to the staging directory."
+    )
+    parser.add_argument(
         "--publish-verified",
         action="store_true",
-        help="Run post-processing to copy verified songs from the processed directory to the verified directory."
+        help="Run post-processing to move verified songs from the staging directory to the verified directory."
     )
     parser.add_argument(
         "--make-videos",
@@ -141,12 +146,13 @@ def main(cli_args=None) -> None:
     # If no CLI arguments were passed (args length is zero), default to running the full
     # end-to-end pipeline including post-processing (staging, moving to verified, and video generation).
     if args_len == 0:
+        args.publish_staging = True
         args.publish_verified = True
         args.make_videos = True
         run_main_pipeline = True
     else:
         # We only prompt for service type / run the main pipeline if not in standalone post-processing mode
-        run_main_pipeline = not (args.publish_verified or args.make_videos) or args.plan_id or args.date or args.audio_file
+        run_main_pipeline = not (args.publish_staging or args.publish_verified or args.make_videos) or args.plan_id or args.date or args.audio_file
 
     # Determine Service Type (CLI -> .env -> Interactive Menu)
     service_type = args.service_type
@@ -218,16 +224,22 @@ def main(cli_args=None) -> None:
                     print("Exiting pipeline to avoid accidentally publishing verified songs.")
                     return
         
-        # 5. Post-Processing: Publish Verified Songs
-        if args.publish_verified:
+        # 5. Post-Processing: Stage Songs
+        if args.publish_staging:
             print("\n" + "=" * 50)
-            print("📦 Post-Processing: Staging and Publishing Songs")
+            print("📦 Post-Processing: Staging Songs")
             print("=" * 50)
             
-            # Copy to staging directory first
+            # Copy to staging directory
             copy_songs(PROCESSED_AUDIO_DIR, STAGING_AUDIO_DIR)
-            
             print(f"\n🎧 Songs have been successfully staged in: {STAGING_AUDIO_DIR}")
+
+        # 6. Post-Processing: Publish Verified Songs
+        if args.publish_verified:
+            print("\n" + "=" * 50)
+            print("🚚 Post-Processing: Publishing Verified Songs")
+            print("=" * 50)
+            
             choice = input("Have you verified the recordings are good enough to move to the VERIFIED_AUDIO_DIR? (y/n): ")
             
             if choice.strip().lower() == 'y':
@@ -238,8 +250,7 @@ def main(cli_args=None) -> None:
                 print("Exiting pipeline to allow audio verification before generating videos.")
                 return
             
-            
-        # 6. Post-Processing: Generate Videos
+        # 7. Post-Processing: Generate Videos
         if args.make_videos:
             print("\n" + "=" * 50)
             print("🎬 Post-Processing: Generating Videos")
