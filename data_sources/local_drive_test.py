@@ -60,12 +60,15 @@ class TestLocalDrive(unittest.TestCase):
         self.assertEqual(result, [wav_file])
 
     def test_discover_raw_audio_directory_with_brackets(self):
-        # Tests that directory paths containing square brackets (e.g. '[Raw] CBC Recordings')
+        # Tests that directory paths containing square brackets (e.g. '[Raw] Recordings')
         # are handled properly and not broken by glob pattern character class syntax
-        bracket_dir = os.path.join(self.raw_audio_dir, "[Raw] CBC Recordings")
+        bracket_dir = os.path.join(self.raw_audio_dir, "[Raw] Recordings")
         os.makedirs(bracket_dir, exist_ok=True)
-        wav_file = os.path.join(bracket_dir, "R_20260906-103109.WAV")
+        wav_file = os.path.join(bracket_dir, "R_20260906-103109.wav")
+        unrelated_file = os.path.join(bracket_dir, "R_20260905-103109.wav")
         with open(wav_file, 'w') as f:
+            f.write("dummy")
+        with open(unrelated_file, 'w') as f:
             f.write("dummy")
 
         result = discover_raw_audio("2026-09-06", bracket_dir)
