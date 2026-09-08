@@ -121,15 +121,17 @@ class TestAudioSegmentation(unittest.TestCase):
 
     @patch('audio_segmentation.audio_segmentation.subprocess.run')
     def test_slice_audio_ffmpeg_copy_command_structure(self, mock_run) -> None:
-        """Verifies correct parameters for fast-seeking and bit-perfect copying."""
-        slice_audio_ffmpeg_copy("input.wav", "output.wav", 1.000, 5.000)
+        """Verifies correct parameters for fast-seeking, duration-based slicing, and bit-perfect copying."""
+        slice_audio_ffmpeg_copy("input.wav", "output.wav", 1000, 5000)
         mock_run.assert_called_once()
         
         args = mock_run.call_args[0][0]
         self.assertIn("-ss", args)
         self.assertIn("1.000", args)
-        self.assertIn("-to", args)
-        self.assertIn("5.000", args)
+        self.assertIn("-t", args)
+        # Duration must be (end_ms - start_ms) / 1000.0 (5000 - 1000 = 4000ms = 4.000s)
+        self.assertIn("4.000", args)
+        self.assertNotIn("-to", args)
         # Ensure the stream copy codec is utilized
         self.assertIn("-c:a", args)
         self.assertIn("copy", args)

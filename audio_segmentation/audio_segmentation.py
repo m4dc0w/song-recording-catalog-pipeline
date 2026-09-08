@@ -119,13 +119,15 @@ def validate_segments(segments: list) -> list:
     return valid_segments
 
 
-def slice_audio_ffmpeg_copy(input_wav: str, output_wav: str, start_s: float, end_s: float) -> None:
+def slice_audio_ffmpeg_copy(input_wav: str, output_wav: str, start_ms: int, end_ms: int) -> None:
     """Slices audio directly on disk using bit-perfect stream copy for maximum fidelity."""
+    start_s = start_ms / 1000.0
+    duration_s = max(0.0, (end_ms - start_ms) / 1000.0)
     command = [
         FFMPEG_PATH, "-y",
         "-ss", f"{start_s:.3f}",
         "-i", input_wav,
-        "-to", f"{end_s:.3f}",
+        "-t", f"{duration_s:.3f}",
         "-c:a", "copy",
         output_wav
     ]
@@ -363,12 +365,7 @@ def segment_service_audio(plan: ServicePlan) -> None:
         report_content += f"-----------------------------------------------------\n\n"
 
         export_path = os.path.join(output_dir, filename)
-        
-        # Convert ms to seconds for the bit-perfect stream copy
-        start_s = start_ms / 1000.0
-        end_s = end_ms / 1000.0
-        
-        slice_audio_ffmpeg_copy(plan.raw_audio_filepath, export_path, start_s, end_s)
+        slice_audio_ffmpeg_copy(plan.raw_audio_filepath, export_path, start_ms, end_ms)
         
         # Formatted Terminal Output
         print(f"  Sliced: [{seg['start_time']} --> {seg['end_time']}] {filename}")
