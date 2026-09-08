@@ -302,7 +302,19 @@ const server = http.createServer((req, res) => {
         for (const file of fileList) {
           const path = file.name;
           // Skip known binary types
-          if (path.endsWith('.wav') || path.endsWith('.mp3') || path.endsWith('.pyc')) continue;
+          if (
+            path.endsWith('.wav') || 
+            path.endsWith('.mp3') || 
+            path.endsWith('.pyc') ||
+            path.endsWith('.png') ||
+            path.endsWith('.jpg') ||
+            path.endsWith('.jpeg') ||
+            path.endsWith('.gif') ||
+            path.endsWith('.ico') ||
+            path.endsWith('.webp') ||
+            path.endsWith('.mp4') ||
+            path.endsWith('.mov')
+          ) continue;
 
           const [localRes, remoteRes] = await Promise.all([
             fetch('/api/local?path=' + encodeURIComponent(path)),
