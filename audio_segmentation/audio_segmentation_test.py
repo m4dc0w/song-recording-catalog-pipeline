@@ -1,8 +1,9 @@
 import os
 import unittest
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, MagicMock
 
 from core.schemas import ServicePlan, Song
+from audio_segmentation.audio_segmentation import segment_service_audio
 from audio_segmentation.audio_segmentation import (
     clean_filename,
     time_to_ms,
@@ -170,6 +171,70 @@ class TestAudioSegmentation(unittest.TestCase):
         with self.assertRaisesRegex(FileExistsError, "Destination folder already exists"):
             segment_service_audio(plan)
 
+
+
+    @patch('audio_segmentation.audio_segmentation.os.path.exists')
+    @patch('audio_segmentation.audio_segmentation.os.makedirs')
+    @patch('audio_segmentation.audio_segmentation.os.remove')
+    @patch('audio_segmentation.audio_segmentation.compress_wav_to_mp3')
+    @patch('audio_segmentation.audio_segmentation.genai.Client')
+    @patch('audio_segmentation.audio_segmentation.slice_audio_ffmpeg_copy')
+    @patch('builtins.open', new_callable=mock_open)
+    def test_segment_service_audio_success(self, mock_file, mock_slice, mock_genai_client, mock_compress, mock_remove, mock_makedirs, mock_exists) -> None:
+        def side_effect(path):
+            if "Output_R_20260906-103109" in path:
+                return False
+            if "R_20260906" in path:
+                return True
+            return False
+        
+        mock_exists.side_effect = side_effect
+
+        mock_client_instance = MagicMock()
+        mock_genai_client.return_value = mock_client_instance
+        
+        mock_audio_file = MagicMock()
+        mock_audio_file.state.name = "ACTIVE"
+        mock_audio_file.name = "mock_file_name"
+        mock_client_instance.files.upload.return_value = mock_audio_file
+        
+        mock_response = MagicMock()
+        mock_response.text = '''{
+            "step_1_audio_analysis": "Mock analysis",
+            "step_2_self_critique": "Mock critique",
+            "final_segments": [
+                {
+                    "start_time": "00:00:01.000",
+                    "end_time": "00:02:00.000",
+                    "label": "song",
+                    "song_title": "Amazing Grace",
+                    "reason": "Because"
+                },
+                {
+                    "start_time": "00:02:00.000",
+                    "end_time": "00:10:00.000",
+                    "label": "sermon",
+                    "song_title": "",
+                    "reason": "Pastor speaking"
+                }
+            ]
+        }'''
+        mock_client_instance.models.generate_content.return_value = mock_response
+
+        plan = ServicePlan(
+            date="2026-09-06",
+            songs=[],
+            raw_audio_filepath="/mock/raw_audio/R_20260906-103109.wav"
+        )
+        
+        segment_service_audio(plan)
+        
+        mock_compress.assert_called_once()
+        mock_client_instance.files.upload.assert_called_once()
+        mock_client_instance.models.generate_content.assert_called_once()
+        
+        self.assertEqual(mock_slice.call_count, 2)
+        mock_file.assert_called()
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

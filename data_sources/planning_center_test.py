@@ -4,7 +4,8 @@ from unittest.mock import patch, MagicMock
 
 import requests
 from core.schemas import ServicePlan, PlanSummary
-from data_sources.planning_center import fetch_service_plan, fetch_recent_plans
+from data_sources.planning_center import fetch_service_plan, fetch_recent_plans, fetch_service_types
+from core.schemas import ServiceType
 
 
 class TestPlanningCenterAPI(unittest.TestCase):
@@ -157,6 +158,63 @@ class TestPlanningCenterAPI(unittest.TestCase):
         self.assertEqual(recent_plans[1].id, "67891")
         self.assertEqual(recent_plans[1].dates, "August 30, 2026")
         self.assertEqual(recent_plans[1].title, "")
+
+
+    @patch("data_sources.planning_center.PCO_APP_ID", "")
+    @patch("data_sources.planning_center.PCO_SECRET", "")
+    def test_fetch_service_types_missing_credentials(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Planning Center credentials missing"):
+            fetch_service_types()
+
+    @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
+    @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")
+    @patch("data_sources.planning_center.requests.get")
+    def test_fetch_service_types_http_error(self, mock_get) -> None:
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("401 Unauthorized")
+        mock_get.return_value = mock_response
+        with self.assertRaises(requests.exceptions.HTTPError):
+            fetch_service_types()
+
+    @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
+    @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")
+    @patch("data_sources.planning_center.requests.get")
+    def test_fetch_service_types_success(self, mock_get) -> None:
+        mock_json_data = {
+            "data": [
+                {
+                    "id": "111",
+                    "attributes": {
+                        "name": "Sunday Morning"
+                    }
+                },
+                {
+                    "id": "222",
+                    "attributes": {
+                        "name": None
+                    }
+                }
+            ]
+        }
+        
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_json_data
+        mock_get.return_value = mock_response
+
+        service_types = fetch_service_types()
+
+        mock_get.assert_called_once()
+        self.assertIn("service_types", mock_get.call_args[0][0])
+        
+        self.assertEqual(len(service_types), 2)
+        
+        self.assertIsInstance(service_types[0], ServiceType)
+        self.assertEqual(service_types[0].id, "111")
+        self.assertEqual(service_types[0].name, "Sunday Morning")
+        
+        self.assertIsInstance(service_types[1], ServiceType)
+        self.assertEqual(service_types[1].id, "222")
+        self.assertEqual(service_types[1].name, "Unknown Service Type")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
