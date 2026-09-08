@@ -192,10 +192,12 @@ You can direct Gemini in the chat interface to modify logic, implement new featu
 * **Automated Verification:** Prompt Gemini to execute `python3 run_tests.py` after edits to ensure that all unit tests pass without regressions before completing the task.
 
 ### 4. Reviewing Changes with the Diff Viewer
-Before committing or exporting your work, inspect the modifications using the built-in Diff Viewer:
-1. Click the **Review PR / Diff Viewer** tab or button in the upper workspace navigation.
-2. Review the side-by-side or unified visual diff of all modified, added, or deleted files.
-3. Verify that only intentional changes and functional artifacts are staged (and that no scratch files or secrets were created).
+Before committing or exporting your work, inspect the modifications using the built-in Diff Viewer in the AI Studio web dashboard:
+1. Click the **Diff Viewer** tab in the dashboard navigation.
+2. **Text & Code Diffs:** Inspect unified and side-by-side diffs across all source files with normalized line endings and syntax highlighting.
+3. **Binary File Change Detection:** The diff engine automatically tracks binary files (such as `.wav`, `.mp3`, `.mp4`, `.png`, and compiled assets) using deterministic Git object SHAs (`git hash-object`) and file sizes. It displays clear change status badges (`✚ Added`, `✎ Modified`, `✖ Deleted`, `📦 Binary`) without downloading heavy binary streams over the network.
+4. **Clean Repository Synchronization:** Internal `.git/` and virtual runtime files are ignored while essential configuration files (like `.gitignore` and `.env.example`) are accurately compared against the remote branch.
+5. Verify that only intentional changes and functional artifacts are staged (and that no scratch files or secrets were created).
 
 ### 5. Committing and Creating a Pull Request (Push to GitHub)
 Once you have reviewed the changes and verified that all tests pass:
