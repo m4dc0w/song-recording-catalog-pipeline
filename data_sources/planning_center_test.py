@@ -9,6 +9,8 @@ from data_sources.planning_center import (
     fetch_recent_plans,
     fetch_service_types,
     _make_pco_request,
+    parse_pco_plan_date,
+    parse_pco_date,
 )
 from core.schemas import ServiceType
 
@@ -156,13 +158,29 @@ class TestPlanningCenterAPI(unittest.TestCase):
         self.assertIsInstance(recent_plans[0], PlanSummary)
         self.assertEqual(recent_plans[0].id, "67890")
         self.assertEqual(recent_plans[0].dates, "September 6, 2026")
+        self.assertEqual(recent_plans[0].dates_raw, "September 6, 2026")
+        self.assertEqual(recent_plans[0].date, "2026-09-06")
         self.assertEqual(recent_plans[0].title, "Vision Sunday")
         
         # Verify second plan mapped correctly and handled null title safely
         self.assertIsInstance(recent_plans[1], PlanSummary)
         self.assertEqual(recent_plans[1].id, "67891")
         self.assertEqual(recent_plans[1].dates, "August 30, 2026")
+        self.assertEqual(recent_plans[1].dates_raw, "August 30, 2026")
+        self.assertEqual(recent_plans[1].date, "2026-08-30")
         self.assertEqual(recent_plans[1].title, "")
+
+    def test_parse_pco_plan_date(self) -> None:
+        """Verifies parsing of various Planning Center date string formats."""
+        self.assertEqual(parse_pco_plan_date("September 6, 2026"), "2026-09-06")
+        self.assertEqual(parse_pco_plan_date("September 6, 2026 at 10:30am"), "2026-09-06")
+        self.assertEqual(parse_pco_plan_date("Sep 6, 2026"), "2026-09-06")
+        self.assertEqual(parse_pco_plan_date("2026-09-06"), "2026-09-06")
+        self.assertIsNone(parse_pco_plan_date("Not A Date"))
+        self.assertIsNone(parse_pco_plan_date(""))
+        self.assertIsNone(parse_pco_plan_date(None))
+        # Verify parse_pco_date alias matches
+        self.assertEqual(parse_pco_date("September 6, 2026"), "2026-09-06")
 
 
     @patch("data_sources.planning_center.PCO_APP_ID", "")

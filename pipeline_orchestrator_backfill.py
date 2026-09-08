@@ -7,11 +7,16 @@ import time
 from datetime import datetime
 from typing import Tuple, Optional, List
 
-from data_sources.planning_center import fetch_recent_plans, fetch_service_plan
+from data_sources.planning_center import (
+    fetch_recent_plans, 
+    fetch_service_plan, 
+    parse_pco_plan_date
+)
 from data_sources.local_drive import discover_raw_audio
 from audio_segmentation.audio_segmentation import segment_service_audio
 from pipeline_orchestrator import (
     prompt_for_service_type, 
+    get_plan_date,
     DEFAULT_SERVICE_TYPE, 
     RAW_AUDIO_DIR,
     PROCESSED_AUDIO_DIR,
@@ -44,10 +49,14 @@ def prompt_for_dates() -> Tuple[str, str]:
             print(f"Error: {e}. Please try again.")
 
 def parse_pco_date(pco_date_str: str) -> Optional[datetime]:
-    try:
-        return datetime.strptime(pco_date_str, "%B %d, %Y")
-    except ValueError:
-        return None
+    """Parses a PCO date string into a datetime object using parse_pco_plan_date."""
+    iso_date = parse_pco_plan_date(pco_date_str)
+    if iso_date:
+        try:
+            return datetime.strptime(iso_date, "%Y-%m-%d")
+        except ValueError:
+            return None
+    return None
 
 def main(cli_args: Optional[List[str]] = None) -> None:
     """Executes the backfill pipeline orchestration loop."""
@@ -197,12 +206,13 @@ def main(cli_args: Optional[List[str]] = None) -> None:
     # Filter plans
     target_plans = []
     for plan in plans:
-        pco_dt = parse_pco_date(plan.dates)
-        if pco_dt:
-            if start_dt <= pco_dt <= end_dt:
-                target_plans.append((plan, pco_dt.strftime("%Y-%m-%d")))
+        plan_date = get_plan_date(plan)
+        if plan_date:
+            if start_date_str <= plan_date <= end_date_str:
+                target_plans.append((plan, plan_date))
         else:
-            print(f"⚠️ Warning: Could not parse date '{plan.dates}' for plan {plan.id}. Skipping.")
+            display_date = getattr(plan, "dates_raw", None) or getattr(plan, "dates", "Unknown Date")
+            print(f"⚠️ Warning: Could not parse date '{display_date}' for plan {plan.id}. Skipping.")
             
     print(f"✅ Found {len(target_plans)} plans matching the timeframe.")
     print("=" * 60)

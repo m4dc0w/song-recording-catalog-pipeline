@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 import requests
 from dotenv import load_dotenv
@@ -15,6 +16,36 @@ load_dotenv()
 PCO_APP_ID: str = os.getenv("PCO_APP_ID", "")
 PCO_SECRET: str = os.getenv("PCO_SECRET", "")
 PCO_BASE_URL: str = "https://api.planningcenteronline.com/services/v2"
+
+
+def parse_pco_plan_date(dates_str: Optional[str]) -> Optional[str]:
+    """Attempts to parse a standardized YYYY-MM-DD date string from a Planning Center dates field.
+    
+    Planning Center typically provides human-readable dates in formats such as:
+    - 'September 6, 2026'
+    - 'September 6, 2026 at 10:30am'
+    - 'Sep 6, 2026'
+    - '2026-09-06'
+    
+    Args:
+        dates_str (Optional[str]): The raw date string from Planning Center.
+        
+    Returns:
+        Optional[str]: Standardized YYYY-MM-DD date string, or None if parsing fails.
+    """
+    if not dates_str:
+        return None
+    cleaned = dates_str.split(" at ")[0].strip()
+    for fmt in ("%B %d, %Y", "%b %d, %Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(cleaned, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return None
+
+
+# Alias for backwards compatibility
+parse_pco_date = parse_pco_plan_date
 
 
 def _make_pco_request(url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -130,7 +161,7 @@ def fetch_recent_plans(service_type_id: str, limit: int = 5) -> List[PlanSummary
         limit (int): The maximum number of recent plans to retrieve.
         
     Returns:
-        List[PlanSummary]: A list of PlanSummary dataclasses containing id, dates, and title.
+        List[PlanSummary]: A list of PlanSummary dataclasses containing id, dates_raw, date, and title.
         
     Raises:
         ValueError: If PCO credentials are not found.
@@ -151,11 +182,14 @@ def fetch_recent_plans(service_type_id: str, limit: int = 5) -> List[PlanSummary
         for item in data.get("data", []):
             plan_id = item.get("id", "")
             attributes = item.get("attributes", {})
+            raw_dates = attributes.get("dates", "Unknown Date")
+            parsed_date = parse_pco_plan_date(raw_dates)
             
             recent_plans.append(
                 PlanSummary(
                     id=plan_id,
-                    dates=attributes.get("dates", "Unknown Date"),
+                    dates_raw=raw_dates,
+                    date=parsed_date,
                     title=attributes.get("title") or ""
                 )
             )

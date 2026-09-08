@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import sys
+from core.schemas import PlanSummary
 import pipeline_orchestrator
 
 class TestPipelineOrchestrator(unittest.TestCase):
@@ -33,6 +34,95 @@ class TestPipelineOrchestrator(unittest.TestCase):
         
         result = pipeline_orchestrator.prompt_for_plan("123")
         
+        self.assertEqual(result, ("456", "2026-09-06"))
+        mock_input.assert_called_once()
+
+    @patch('pipeline_orchestrator.fetch_recent_plans')
+    @patch('pipeline_orchestrator.input')
+    def test_prompt_for_plan_with_target_date(self, mock_input, mock_fetch_recent_plans):
+        plan1 = MagicMock(id="456", dates="September 6, 2026", title="Morning Service")
+        plan2 = MagicMock(id="457", dates="August 30, 2026", title="Previous Week")
+        mock_fetch_recent_plans.return_value = [plan1, plan2]
+        mock_input.return_value = "1"
+
+        result = pipeline_orchestrator.prompt_for_plan("123", target_date="2026-09-06")
+
+        self.assertEqual(result, ("456", "2026-09-06"))
+        mock_input.assert_called_once()
+
+    @patch('pipeline_orchestrator.fetch_recent_plans')
+    @patch('pipeline_orchestrator.input')
+    def test_prompt_for_plan_with_target_date_all_option(self, mock_input, mock_fetch_recent_plans):
+        plan1 = MagicMock(id="456", dates="September 6, 2026", title="9 AM Service")
+        plan2 = MagicMock(id="457", dates="September 6, 2026", title="11 AM Service")
+        mock_fetch_recent_plans.return_value = [plan1, plan2]
+        mock_input.return_value = "a"
+
+        result = pipeline_orchestrator.prompt_for_plan("123", target_date="2026-09-06")
+
+        self.assertEqual(result, [("456", "2026-09-06"), ("457", "2026-09-06")])
+
+    @patch('pipeline_orchestrator.fetch_recent_plans')
+    @patch('pipeline_orchestrator.input')
+    def test_prompt_for_plan_with_date_range(self, mock_input, mock_fetch_recent_plans):
+        plan1 = MagicMock(id="456", dates="August 9, 2026", title="Summer Service 1")
+        plan2 = MagicMock(id="457", dates="August 16, 2026", title="Summer Service 2")
+        plan3 = MagicMock(id="458", dates="September 6, 2026", title="Fall Kickoff")
+        mock_fetch_recent_plans.return_value = [plan1, plan2, plan3]
+        mock_input.return_value = "2"
+
+        result = pipeline_orchestrator.prompt_for_plan("123", start_date="2026-08-01", end_date="2026-08-31")
+
+        self.assertEqual(result, ("457", "2026-08-16"))
+
+    @patch('pipeline_orchestrator.fetch_recent_plans')
+    @patch('pipeline_orchestrator.input')
+    def test_prompt_for_plan_with_date_range_all_option(self, mock_input, mock_fetch_recent_plans):
+        plan1 = MagicMock(id="456", dates="August 9, 2026", title="Summer Service 1")
+        plan2 = MagicMock(id="457", dates="August 16, 2026", title="Summer Service 2")
+        mock_fetch_recent_plans.return_value = [plan1, plan2]
+        mock_input.return_value = "a"
+
+        result = pipeline_orchestrator.prompt_for_plan("123", start_date="2026-08-01", end_date="2026-08-31")
+
+        self.assertEqual(result, [("456", "2026-08-09"), ("457", "2026-08-16")])
+
+    @patch('pipeline_orchestrator.fetch_recent_plans')
+    def test_prompt_for_plan_no_matching_date_exits(self, mock_fetch_recent_plans):
+        plan1 = MagicMock(id="456", dates="September 6, 2026", title="Morning Service")
+        mock_fetch_recent_plans.return_value = [plan1]
+
+        with self.assertRaises(SystemExit):
+            pipeline_orchestrator.prompt_for_plan("123", target_date="2026-01-01")
+
+    def test_get_plan_date(self):
+        # 1. Real PlanSummary with normalized date
+        ps = PlanSummary(id="1", dates_raw="September 6, 2026", date="2026-09-06", title="Service")
+        self.assertEqual(pipeline_orchestrator.get_plan_date(ps), "2026-09-06")
+
+        # 2. PlanSummary without normalized date (falls back to parsing dates_raw)
+        ps_raw = PlanSummary(id="2", dates_raw="August 30, 2026")
+        self.assertEqual(pipeline_orchestrator.get_plan_date(ps_raw), "2026-08-30")
+
+        # 3. Object with only .dates
+        mock_obj = MagicMock(spec=["dates"])
+        mock_obj.dates = "September 13, 2026"
+        self.assertEqual(pipeline_orchestrator.get_plan_date(mock_obj), "2026-09-13")
+
+        # 4. Invalid date string
+        ps_invalid = PlanSummary(id="3", dates_raw="Invalid Date")
+        self.assertIsNone(pipeline_orchestrator.get_plan_date(ps_invalid))
+
+    @patch('pipeline_orchestrator.fetch_recent_plans')
+    @patch('pipeline_orchestrator.input')
+    def test_prompt_for_plan_with_plan_summary_dataclass(self, mock_input, mock_fetch_recent_plans):
+        plan1 = PlanSummary(id="456", dates_raw="September 6, 2026", date="2026-09-06", title="Morning Service")
+        plan2 = PlanSummary(id="457", dates_raw="August 30, 2026", date="2026-08-30", title="Previous Week")
+        mock_fetch_recent_plans.return_value = [plan1, plan2]
+        mock_input.return_value = "1"
+
+        result = pipeline_orchestrator.prompt_for_plan("123", target_date="2026-09-06")
+
         self.assertEqual(result, ("456", "2026-09-06"))
         mock_input.assert_called_once()
 
@@ -86,6 +176,71 @@ class TestPipelineOrchestrator(unittest.TestCase):
         mock_copy_songs.assert_not_called()
         mock_move_songs.assert_not_called()
         mock_make_videos.assert_not_called()
+
+    @patch('pipeline_orchestrator.prompt_for_service_type')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    @patch('pipeline_orchestrator.discover_raw_audio')
+    @patch('pipeline_orchestrator.segment_service_audio')
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    def test_main_pipeline_segmentation_only_with_date(self, mock_make_videos, mock_move_songs, mock_copy_songs, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st):
+        """When running with only --date, prompts for service type (if not set) and plan, then segments without post-processing."""
+        mock_prompt_st.return_value = "123"
+        mock_prompt_plan.return_value = ("456", "2026-09-06")
+        mock_plan_obj = MagicMock()
+        mock_fetch_plan.return_value = mock_plan_obj
+        mock_discover.return_value = ["/path/to/R_20260906-103109.wav"]
+
+        pipeline_orchestrator.main(["--date", "2026-09-06"])
+
+        mock_prompt_st.assert_called_once()
+        mock_prompt_plan.assert_called_once_with("123", target_date="2026-09-06", start_date=None, end_date=None)
+        mock_fetch_plan.assert_called_once_with("123", "456", "2026-09-06")
+        mock_discover.assert_called_once_with("2026-09-06", pipeline_orchestrator.RAW_AUDIO_DIR)
+        mock_segment.assert_called_once_with(mock_plan_obj)
+        mock_copy_songs.assert_not_called()
+        mock_move_songs.assert_not_called()
+        mock_make_videos.assert_not_called()
+
+    @patch('pipeline_orchestrator.prompt_for_service_type')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    @patch('pipeline_orchestrator.discover_raw_audio')
+    @patch('pipeline_orchestrator.segment_service_audio')
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    def test_main_pipeline_segmentation_only_with_date_range(self, mock_make_videos, mock_move_songs, mock_copy_songs, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st):
+        """When running with --start-date and --end-date, prompts for plans in range and runs segmentation without post-processing."""
+        mock_prompt_st.return_value = "123"
+        mock_prompt_plan.return_value = ("456", "2026-08-09")
+        mock_plan_obj = MagicMock()
+        mock_fetch_plan.return_value = mock_plan_obj
+        mock_discover.return_value = ["/path/to/R_20260809-103109.wav"]
+
+        pipeline_orchestrator.main(["--service-type", "123", "--start-date", "2026-08-01", "--end-date", "2026-08-31"])
+
+        mock_prompt_st.assert_not_called()
+        mock_prompt_plan.assert_called_once_with("123", target_date=None, start_date="2026-08-01", end_date="2026-08-31")
+        mock_fetch_plan.assert_called_once_with("123", "456", "2026-08-09")
+        mock_segment.assert_called_once_with(mock_plan_obj)
+        mock_copy_songs.assert_not_called()
+        mock_move_songs.assert_not_called()
+        mock_make_videos.assert_not_called()
+
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    def test_main_pipeline_date_and_range_mutually_exclusive(self, mock_fetch_plan):
+        """Providing both --date and --start-date/--end-date should fail with an error."""
+        pipeline_orchestrator.main(["--date", "2026-09-06", "--start-date", "2026-08-01", "--end-date", "2026-08-31"])
+        mock_fetch_plan.assert_not_called()
+
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    def test_main_pipeline_plan_id_without_date_errors(self, mock_fetch_plan):
+        """Specifying --plan-id without --date should print an error and exit without calling Planning Center."""
+        pipeline_orchestrator.main(["--service-type", "123", "--plan-id", "456"])
+        mock_fetch_plan.assert_not_called()
 
     @patch('pipeline_orchestrator.prompt_for_service_type')
     @patch('pipeline_orchestrator.prompt_for_plan')

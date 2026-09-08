@@ -23,12 +23,36 @@ class PlanSummary:
     
     Attributes:
         id (str): The unique Planning Center Plan ID.
-        dates (str): The human-readable date string provided by Planning Center.
+        dates_raw (str): The human-readable raw date string provided by Planning Center (e.g. 'September 6, 2026').
+        date (Optional[str]): The normalized date in YYYY-MM-DD format (e.g. '2026-09-06').
         title (str): An optional custom title for the service plan (e.g., 'Vision Sunday').
     """
     id: str
-    dates: str
+    dates_raw: str = ""
+    date: Optional[str] = None
     title: str = ""
+
+    def __init__(
+        self,
+        id: str,
+        dates_raw: str = "",
+        date: Optional[str] = None,
+        title: str = "",
+        dates: Optional[str] = None,
+    ):
+        self.id = id
+        self.dates_raw = dates if (dates is not None and not dates_raw) else dates_raw
+        self.date = date
+        self.title = title
+
+    @property
+    def dates(self) -> str:
+        """Backward-compatible alias for dates_raw."""
+        return self.dates_raw
+
+    @dates.setter
+    def dates(self, value: str) -> None:
+        self.dates_raw = value
 
 @dataclass
 class Sermon:
@@ -63,11 +87,14 @@ class ServicePlan:
         sermon (Sermon, optional): Sermon details, if applicable. Defaults to None.
         raw_audio_filepath (str, optional): The absolute local path to the 
             source .wav file. Populated dynamically by the orchestrator.
+        dates_raw (str, optional): The human-readable raw date string from 
+            Planning Center, if available. Defaults to an empty string.
     """
     date: str
     songs: List[Song] = field(default_factory=list)
     sermon: Optional[Sermon] = None
     raw_audio_filepath: Optional[str] = None
+    dates_raw: str = ""
 
 @dataclass
 class ServiceType:

@@ -76,9 +76,15 @@ python3 pipeline_orchestrator.py
   8. **Post-Processing (Generate Videos):** Renders OLED-safe, loudness-normalized MP4 videos into `VIDEOS_DIR`.
 
 *Fine-Grained Controls & Overrides:*
-You can bypass the interactive menu for headless automation, skip post-processing, or isolate specific stages:
+You can specify a date or date range to run segmentation only (interactively selecting the service type and plan without needing to look up IDs), bypass all menus for headless automation, or isolate specific stages:
 ```bash
-# Run segmentation only (skips post-processing)
+# Run segmentation only for a specific date (prompts to select service type and plan):
+python3 pipeline_orchestrator.py --date "2026-09-06"
+
+# Run segmentation only for a date range (prompts to select plan(s) in range):
+python3 pipeline_orchestrator.py --start-date "2026-08-01" --end-date "2026-08-31"
+
+# Advanced: Run segmentation headlessly (bypasses all prompts):
 python3 pipeline_orchestrator.py --service-type "987654" --plan-id "123456" --date "2026-09-06"
 
 # Run interactive segmentation only without post-processing
