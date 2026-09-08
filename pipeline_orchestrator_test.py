@@ -116,7 +116,8 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.input')
     @patch('pipeline_orchestrator.prompt_for_plan')
     def test_main_post_processing(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
-        mock_input.return_value = "y"
+        # Option 3 (all dates) for staging date prompt, "y" for move_songs verification
+        mock_input.side_effect = ["3", "y"]
         
         pipeline_orchestrator.main(["--service-type", "123", "--publish-staging", "--publish-verified", "--make-videos"])
         
@@ -129,12 +130,35 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.move_songs')
     @patch('pipeline_orchestrator.make_videos')
     @patch('pipeline_orchestrator.prompt_for_plan')
-    def test_main_post_processing_staging_only(self, mock_prompt_plan, mock_make_videos, mock_move_songs, mock_copy_songs):
-        """When --publish-staging is passed alone, only copy_songs is called and verified move is skipped."""
+    def test_main_post_processing_staging_only_with_all_flag(self, mock_prompt_plan, mock_make_videos, mock_move_songs, mock_copy_songs):
+        """When --publish-staging is passed with --all, date prompting is bypassed and all songs are staged."""
+        pipeline_orchestrator.main(["--service-type", "123", "--publish-staging", "--all"])
+        
+        mock_prompt_plan.assert_not_called()
+        mock_copy_songs.assert_called_once()
+        kwargs = mock_copy_songs.call_args[1]
+        self.assertIsNone(kwargs.get("target_date"))
+        self.assertIsNone(kwargs.get("start_date"))
+        self.assertIsNone(kwargs.get("end_date"))
+        mock_move_songs.assert_not_called()
+        mock_make_videos.assert_not_called()
+
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    @patch('pipeline_orchestrator.input')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    def test_main_post_processing_staging_only_prompts_for_date(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
+        """When --publish-staging is passed without date flags, it defaults to prompting for the dates."""
+        mock_input.side_effect = ["1", "2026-09-06"]
         pipeline_orchestrator.main(["--service-type", "123", "--publish-staging"])
         
         mock_prompt_plan.assert_not_called()
         mock_copy_songs.assert_called_once()
+        kwargs = mock_copy_songs.call_args[1]
+        self.assertEqual(kwargs.get("target_date"), "2026-09-06")
+        self.assertIsNone(kwargs.get("start_date"))
+        self.assertIsNone(kwargs.get("end_date"))
         mock_move_songs.assert_not_called()
         mock_make_videos.assert_not_called()
 
@@ -161,7 +185,8 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.prompt_for_plan')
     def test_main_post_processing_declined_verification(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
         """When the user does not enter 'y' to verify songs, move_songs and make_videos must not be executed."""
-        mock_input.return_value = "n"
+        # Option 3 for staging date prompt, "n" for verification prompt
+        mock_input.side_effect = ["3", "n"]
         
         pipeline_orchestrator.main(["--service-type", "123", "--publish-staging", "--publish-verified", "--make-videos"])
         
@@ -216,6 +241,97 @@ class TestPipelineOrchestrator(unittest.TestCase):
         mock_copy_songs.assert_not_called()
         mock_move_songs.assert_not_called()
         mock_make_videos.assert_not_called()
+
+    @patch('pipeline_orchestrator.prompt_for_service_type')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    @patch('pipeline_orchestrator.discover_raw_audio')
+    @patch('pipeline_orchestrator.segment_service_audio')
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    @patch('pipeline_orchestrator.input')
+    def test_main_pipeline_default_zero_args_scopes_staging_to_target_date(self, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st):
+        """Interactive Sunday run locks a single target date and passes that target_date to copy_songs."""
+        mock_input.return_value = "y"
+        mock_prompt_st.return_value = "123"
+        mock_prompt_plan.return_value = ("456", "2026-09-06")
+        mock_fetch_plan.return_value = MagicMock()
+        mock_discover.return_value = ["/path/to/R_20260906-103109.wav"]
+
+        pipeline_orchestrator.main([])
+
+        mock_copy_songs.assert_called_once()
+        kwargs = mock_copy_songs.call_args[1]
+        self.assertEqual(kwargs.get("target_date"), "2026-09-06")
+
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    def test_main_post_processing_with_date_flag(self, mock_fetch_plan, mock_copy_songs):
+        """Standalone post-processing with --date scopes copy_songs to that date without running main pipeline."""
+        pipeline_orchestrator.main(["--publish-staging", "--date", "2026-09-06"])
+
+        mock_fetch_plan.assert_not_called()
+        mock_copy_songs.assert_called_once()
+        kwargs = mock_copy_songs.call_args[1]
+        self.assertEqual(kwargs.get("target_date"), "2026-09-06")
+
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    def test_main_post_processing_with_date_range_flags(self, mock_fetch_plan, mock_copy_songs):
+        """Standalone post-processing with --start-date and --end-date scopes copy_songs to that timeframe."""
+        pipeline_orchestrator.main(["--publish-staging", "--start-date", "2026-08-01", "--end-date", "2026-08-31"])
+
+        mock_fetch_plan.assert_not_called()
+        mock_copy_songs.assert_called_once()
+        kwargs = mock_copy_songs.call_args[1]
+        self.assertEqual(kwargs.get("start_date"), "2026-08-01")
+        self.assertEqual(kwargs.get("end_date"), "2026-08-31")
+
+    @patch('pipeline_orchestrator.input')
+    def test_prompt_for_staging_dates_option_1_single_date(self, mock_input):
+        mock_input.side_effect = ["1", "2026-09-06"]
+        target, start, end = pipeline_orchestrator.prompt_for_staging_dates()
+        self.assertEqual(target, "2026-09-06")
+        self.assertIsNone(start)
+        self.assertIsNone(end)
+
+    @patch('pipeline_orchestrator.input')
+    def test_prompt_for_staging_dates_option_2_range(self, mock_input):
+        mock_input.side_effect = ["2", "2026-08-01", "2026-08-31"]
+        target, start, end = pipeline_orchestrator.prompt_for_staging_dates()
+        self.assertIsNone(target)
+        self.assertEqual(start, "2026-08-01")
+        self.assertEqual(end, "2026-08-31")
+
+    @patch('pipeline_orchestrator.input')
+    def test_prompt_for_staging_dates_option_3_all(self, mock_input):
+        mock_input.side_effect = ["3"]
+        target, start, end = pipeline_orchestrator.prompt_for_staging_dates()
+        self.assertIsNone(target)
+        self.assertIsNone(start)
+        self.assertIsNone(end)
+
+    @patch('pipeline_orchestrator.input')
+    def test_prompt_for_staging_dates_direct_date(self, mock_input):
+        mock_input.side_effect = ["2026-09-06"]
+        target, start, end = pipeline_orchestrator.prompt_for_staging_dates()
+        self.assertEqual(target, "2026-09-06")
+        self.assertIsNone(start)
+        self.assertIsNone(end)
+
+    @patch('pipeline_orchestrator.input')
+    def test_prompt_for_staging_dates_invalid_then_valid(self, mock_input):
+        mock_input.side_effect = ["99", "1", "invalid-date", "2026-09-06"]
+        target, start, end = pipeline_orchestrator.prompt_for_staging_dates()
+        self.assertEqual(target, "2026-09-06")
+        self.assertIsNone(start)
+        self.assertIsNone(end)
+
+    @patch('pipeline_orchestrator.copy_songs')
+    def test_main_mismatched_start_date_without_end_date(self, mock_copy_songs):
+        pipeline_orchestrator.main(["--publish-staging", "--start-date", "2026-08-01"])
+        mock_copy_songs.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

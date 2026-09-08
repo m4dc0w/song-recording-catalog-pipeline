@@ -92,11 +92,25 @@ python3 pipeline_orchestrator.py --audio-file "R_20260906-103109.wav" --publish-
 
 After the AI segments the audio, you can run post-processing steps individually or combined to stage, verify, and generate videos.
 
-**Stage Songs:**
-Strips the AI numbering prefix (e.g., `Song_01_`) and safely copies the files from `PROCESSED_AUDIO_DIR` to your staging area (`STAGING_AUDIO_DIR`):
-```bash
-python3 pipeline_orchestrator.py --publish-staging
-```
+**Stage Songs (Date-Scoped):**
+Strips the AI numbering prefix (e.g., `Song_01_`) and safely copies files from `PROCESSED_AUDIO_DIR` to your staging area (`STAGING_AUDIO_DIR`).
+- When running the interactive pipeline for a single Sunday, `--publish-staging` is **automatically scoped** to copy only that specific Sunday's songs.
+- **Interactive Date Prompt (Default):** If no date flags are passed during standalone post-processing, the orchestrator interactively prompts you to select a single service date, a date range, or all songs:
+  ```bash
+  python3 pipeline_orchestrator.py --publish-staging
+  ```
+- For standalone post-processing of a specific date:
+  ```bash
+  python3 pipeline_orchestrator.py --publish-staging --date "2026-09-06"
+  ```
+- For post-processing a specific date range (inclusive):
+  ```bash
+  python3 pipeline_orchestrator.py --publish-staging --start-date "2026-08-01" --end-date "2026-08-31"
+  ```
+- To stage all songs regardless of date without prompting:
+  ```bash
+  python3 pipeline_orchestrator.py --publish-staging --all
+  ```
 
 **Publish Verified Songs:**
 Prompts you to confirm if the recordings in `STAGING_AUDIO_DIR` have been manually verified. If you type 'y', it securely moves them into your `VERIFIED_AUDIO_DIR` without overwriting existing files:
@@ -133,9 +147,16 @@ python3 pipeline_orchestrator_backfill.py
   5. Respects API rate limits automatically by pausing between plans.
   6. Prints a final summary report of all successful and failed processing dates.
 
-*Optional Overrides:*
+*Optional Overrides & In-Line Post-Processing:*
 ```bash
-python3 pipeline_orchestrator_backfill.py --start-date "2026-01-01" --end-date "2026-12-31" --limit 200
+# Backfill with automatic staging scoped strictly to the backfill timeframe (inclusive)
+python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging
+
+# Full end-to-end backfill with staging, verification prompt, and video rendering
+python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging --publish-verified --make-videos
+
+# Run post-processing only for a previous backfill timeframe (skips plan fetching and segmentation)
+python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging --post-processing-only
 ```
 
 *Logging Output & Errors to a File:*
@@ -144,10 +165,10 @@ python3 -u pipeline_orchestrator_backfill.py 2>&1 | tee tmp/backfill_report.txt
 ```
 
 * **Next Steps After Backfill:**
-Once backfilling is complete and you have verified the sliced audio files in `PROCESSED_AUDIO_DIR`, proceed to **[Post-Processing: Publishing & Video Generation](#2-post-processing-publishing--video-generation)** to stage, verify, and generate videos for the entire batch:
+If you ran backfill without `--publish-staging`, you can stage only the files from that backfill timeframe using `pipeline_orchestrator.py`:
 ```bash
-# Stage the segmented songs:
-python3 pipeline_orchestrator.py --publish-staging
+# Stage only songs from the backfill timeframe:
+python3 pipeline_orchestrator.py --publish-staging --start-date "2026-08-01" --end-date "2026-08-31"
 
 # After listening and verifying in STAGING_AUDIO_DIR, publish and generate videos:
 python3 pipeline_orchestrator.py --publish-verified --make-videos

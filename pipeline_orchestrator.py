@@ -51,6 +51,65 @@ def prompt_for_service_type() -> str:
             print("Please enter a valid number.")
 
 
+def prompt_for_staging_dates() -> tuple[str | None, str | None, str | None]:
+    """Prompts the user for date filtering options when staging songs.
+    
+    Returns:
+        tuple[Optional[str], Optional[str], Optional[str]]:
+            (target_date, start_date, end_date)
+    """
+    print("\n📅 Date Filter for Staging Songs:")
+    print("-" * 40)
+    print("  [1] Single service date (YYYY-MM-DD)")
+    print("  [2] Date range (Start Date & End Date)")
+    print("  [3] All dates (stage all songs)")
+    print("-" * 40)
+    while True:
+        try:
+            choice = input("Select an option [1-3] (Default: 1): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nOperation cancelled.")
+            sys.exit(0)
+            
+        if choice in ("", "1"):
+            while True:
+                try:
+                    date_str = input("Enter service date (YYYY-MM-DD): ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("\nOperation cancelled.")
+                    sys.exit(0)
+                try:
+                    datetime.strptime(date_str, "%Y-%m-%d")
+                    return date_str, None, None
+                except ValueError:
+                    print(f"❌ Error: Invalid date format: '{date_str}'. Expected YYYY-MM-DD. Please try again.")
+        elif choice == "2":
+            while True:
+                try:
+                    start_str = input("Start Date (YYYY-MM-DD): ").strip()
+                    end_str = input("End Date (YYYY-MM-DD): ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("\nOperation cancelled.")
+                    sys.exit(0)
+                try:
+                    start_dt = datetime.strptime(start_str, "%Y-%m-%d")
+                    end_dt = datetime.strptime(end_str, "%Y-%m-%d")
+                    if start_dt > end_dt:
+                        print("❌ Error: Start date must be before or equal to end date. Please try again.")
+                        continue
+                    return None, start_str, end_str
+                except ValueError:
+                    print("❌ Error: Invalid date format. Expected YYYY-MM-DD. Please try again.")
+        elif choice in ("3", "all", "a"):
+            return None, None, None
+        else:
+            try:
+                datetime.strptime(choice, "%Y-%m-%d")
+                return choice, None, None
+            except ValueError:
+                print("Invalid selection. Please enter 1, 2, 3, or a valid YYYY-MM-DD date.")
+
+
 def prompt_for_plan(service_type_id: str) -> tuple[str, str]:
     """Provides an interactive CLI menu to select a recent Planning Center plan.
     
@@ -116,6 +175,19 @@ def main(cli_args=None) -> None:
     
     # Post-Processing Arguments
     parser.add_argument(
+        "--start-date",
+        help="Optional start date (YYYY-MM-DD) to filter songs during post-processing."
+    )
+    parser.add_argument(
+        "--end-date",
+        help="Optional end date (YYYY-MM-DD) to filter songs during post-processing."
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Stage all songs across all dates without prompting for date filtering."
+    )
+    parser.add_argument(
         "--publish-staging",
         action="store_true",
         help="Run post-processing to copy and stage songs from the processed directory to the staging directory."
@@ -145,6 +217,7 @@ def main(cli_args=None) -> None:
 
     # If no CLI arguments were passed (args length is zero), default to running the full
     # end-to-end pipeline including post-processing (staging, moving to verified, and video generation).
+    has_post_processing_flags = args.publish_staging or args.publish_verified or args.make_videos
     if args_len == 0:
         args.publish_staging = True
         args.publish_verified = True
@@ -152,7 +225,29 @@ def main(cli_args=None) -> None:
         run_main_pipeline = True
     else:
         # We only prompt for service type / run the main pipeline if not in standalone post-processing mode
-        run_main_pipeline = not (args.publish_staging or args.publish_verified or args.make_videos) or args.plan_id or args.date or args.audio_file
+        run_main_pipeline = not has_post_processing_flags or bool(args.plan_id or args.audio_file)
+
+    if (args.start_date and not args.end_date) or (args.end_date and not args.start_date):
+        print("❌ Error: Both --start-date and --end-date must be provided together.")
+        return
+
+    if args.start_date and args.end_date:
+        try:
+            s_dt = datetime.strptime(args.start_date, "%Y-%m-%d")
+            e_dt = datetime.strptime(args.end_date, "%Y-%m-%d")
+            if s_dt > e_dt:
+                print("❌ Error: --start-date must be before or equal to --end-date.")
+                return
+        except ValueError as e:
+            print(f"❌ Error: Invalid date format: {e}. Expected YYYY-MM-DD.")
+            return
+
+    if args.date:
+        try:
+            datetime.strptime(args.date, "%Y-%m-%d")
+        except ValueError as e:
+            print(f"❌ Error: Invalid date format for --date: {e}. Expected YYYY-MM-DD.")
+            return
 
     # Determine Service Type (CLI -> .env -> Interactive Menu)
     service_type = args.service_type
@@ -164,13 +259,16 @@ def main(cli_args=None) -> None:
     print("\n🚀 Starting Pipeline Orchestrator...")
     print("=" * 50)
     
+    target_date = args.date
+    target_plan_id = args.plan_id
+
     try:
         if run_main_pipeline:
             # 1. Resolve Plan ID and Date (Interactive Menu or CLI Flags)
             if args.plan_id and args.date:
                 target_plan_id = args.plan_id
                 target_date = args.date
-            elif args.plan_id or args.date:
+            elif args.plan_id or (args.date and not has_post_processing_flags):
                 print("❌ Error: Both --plan-id and --date must be provided together if bypassing the menu.")
                 return
             else:
@@ -230,8 +328,28 @@ def main(cli_args=None) -> None:
             print("📦 Post-Processing: Staging Songs")
             print("=" * 50)
             
-            # Copy to staging directory
-            copy_songs(PROCESSED_AUDIO_DIR, STAGING_AUDIO_DIR)
+            staging_target_date = target_date
+            staging_start_date = args.start_date
+            staging_end_date = args.end_date
+
+            # If no dates were provided in CLI args and not locked during interactive run,
+            # default to prompting the user for dates unless --all is specified.
+            if (
+                not staging_target_date 
+                and not staging_start_date 
+                and not staging_end_date 
+                and not getattr(args, 'all', False)
+            ):
+                staging_target_date, staging_start_date, staging_end_date = prompt_for_staging_dates()
+
+            # Copy to staging directory (scoped to target date or timeframe if provided)
+            copy_songs(
+                PROCESSED_AUDIO_DIR, 
+                STAGING_AUDIO_DIR, 
+                target_date=staging_target_date, 
+                start_date=staging_start_date, 
+                end_date=staging_end_date
+            )
             print(f"\n🎧 Songs have been successfully staged in: {STAGING_AUDIO_DIR}")
 
         # 6. Post-Processing: Publish Verified Songs

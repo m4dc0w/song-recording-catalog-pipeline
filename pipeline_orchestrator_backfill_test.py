@@ -125,5 +125,49 @@ class TestPipelineOrchestratorBackfill(unittest.TestCase):
                             pipeline_orchestrator_backfill.main()
                         mock_fetch.assert_called_once_with("123", limit=100)
 
+    @patch('pipeline_orchestrator_backfill.fetch_recent_plans')
+    @patch('pipeline_orchestrator_backfill.discover_raw_audio')
+    @patch('pipeline_orchestrator_backfill.fetch_service_plan')
+    @patch('pipeline_orchestrator_backfill.segment_service_audio')
+    @patch('pipeline_orchestrator_backfill.time.sleep')
+    @patch('pipeline_orchestrator_backfill.copy_songs')
+    def test_main_backfill_with_publish_staging_scopes_to_timeframe(self, mock_copy_songs, mock_sleep, mock_segment, mock_fetch_plan, mock_discover, mock_fetch_recent):
+        mock_plan = MagicMock()
+        mock_plan.id = "456"
+        mock_plan.dates = "September 6, 2026"
+        mock_plan.title = "Vision Sunday"
+        mock_fetch_recent.return_value = [mock_plan]
+        mock_discover.return_value = ["/path/to/R_20260906-103109.wav"]
+        mock_fetch_plan.return_value = MagicMock()
+
+        pipeline_orchestrator_backfill.main([
+            "--service-type", "123",
+            "--start-date", "2026-09-01",
+            "--end-date", "2026-09-30",
+            "--publish-staging"
+        ])
+
+        mock_copy_songs.assert_called_once()
+        kwargs = mock_copy_songs.call_args[1]
+        self.assertEqual(kwargs.get("start_date"), "2026-09-01")
+        self.assertEqual(kwargs.get("end_date"), "2026-09-30")
+
+    @patch('pipeline_orchestrator_backfill.fetch_recent_plans')
+    @patch('pipeline_orchestrator_backfill.copy_songs')
+    def test_main_backfill_post_processing_only(self, mock_copy_songs, mock_fetch_recent):
+        pipeline_orchestrator_backfill.main([
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-31",
+            "--publish-staging",
+            "--post-processing-only"
+        ])
+
+        # Segmentation / plan fetching must be skipped in post-processing-only mode
+        mock_fetch_recent.assert_not_called()
+        mock_copy_songs.assert_called_once()
+        kwargs = mock_copy_songs.call_args[1]
+        self.assertEqual(kwargs.get("start_date"), "2026-08-01")
+        self.assertEqual(kwargs.get("end_date"), "2026-08-31")
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

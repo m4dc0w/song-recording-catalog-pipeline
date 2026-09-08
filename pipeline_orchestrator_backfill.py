@@ -8,7 +8,19 @@ from typing import Tuple, Optional
 from data_sources.planning_center import fetch_recent_plans, fetch_service_plan
 from data_sources.local_drive import discover_raw_audio
 from audio_segmentation.audio_segmentation import segment_service_audio
-from pipeline_orchestrator import prompt_for_service_type, DEFAULT_SERVICE_TYPE, RAW_AUDIO_DIR
+from pipeline_orchestrator import (
+    prompt_for_service_type, 
+    DEFAULT_SERVICE_TYPE, 
+    RAW_AUDIO_DIR,
+    PROCESSED_AUDIO_DIR,
+    STAGING_AUDIO_DIR,
+    VERIFIED_AUDIO_DIR,
+    VIDEOS_DIR,
+    FFMPEG_PATH
+)
+from post_processing.copy_songs import copy_songs
+from post_processing.move_songs import move_songs
+from post_processing.make_videos import make_videos
 
 def parse_date(date_str: str) -> datetime:
     try:
@@ -35,7 +47,7 @@ def parse_pco_date(pco_date_str: str) -> Optional[datetime]:
     except ValueError:
         return None
 
-def main() -> None:
+def main(cli_args: list[str] | None = None) -> None:
     """Executes the backfill pipeline orchestration loop."""
     parser = argparse.ArgumentParser(description="Song Recording Catalog Pipeline - Backfill Orchestrator.")
     
@@ -58,15 +70,54 @@ def main() -> None:
         default=100,
         help="Maximum number of historical plans to fetch from PCO before filtering (Default: 100)."
     )
+    parser.add_argument(
+        "--publish-staging",
+        action="store_true",
+        help="Run post-processing to copy and stage songs from the processed directory to the staging directory for the backfill timeframe."
+    )
+    parser.add_argument(
+        "--publish-verified",
+        action="store_true",
+        help="Run post-processing to move verified songs from the staging directory to the verified directory."
+    )
+    parser.add_argument(
+        "--make-videos",
+        action="store_true",
+        help="Run post-processing to generate MP4 videos from the verified audio recordings."
+    )
+    parser.add_argument(
+        "--skip-post-processing",
+        action="store_true",
+        help="Skip post-processing after backfill."
+    )
+    parser.add_argument(
+        "--post-processing-only",
+        action="store_true",
+        help="Skip fetching plans and audio segmentation, running only post-processing for the specified backfill timeframe."
+    )
     
-    args = parser.parse_args()
+    if cli_args is not None:
+        args = parser.parse_args(cli_args)
+    else:
+        args = parser.parse_args()
 
-    service_type = args.service_type
-    if not service_type:
+    publish_staging = bool(isinstance(getattr(args, 'publish_staging', False), bool) and args.publish_staging)
+    publish_verified = bool(isinstance(getattr(args, 'publish_verified', False), bool) and args.publish_verified)
+    make_videos_flag = bool(isinstance(getattr(args, 'make_videos', False), bool) and args.make_videos)
+    skip_post_processing = bool(isinstance(getattr(args, 'skip_post_processing', False), bool) and args.skip_post_processing)
+    post_processing_only = bool(isinstance(getattr(args, 'post_processing_only', False), bool) and args.post_processing_only)
+
+    if skip_post_processing:
+        publish_staging = False
+        publish_verified = False
+        make_videos_flag = False
+
+    service_type = getattr(args, 'service_type', None)
+    if not service_type and not post_processing_only:
         print("\n🔍 No Service Type ID provided in .env or arguments. Let's find it...")
         service_type = prompt_for_service_type()
         
-    if args.start_date and args.end_date:
+    if getattr(args, 'start_date', None) and getattr(args, 'end_date', None):
         start_date_str = args.start_date
         end_date_str = args.end_date
         try:
@@ -75,7 +126,7 @@ def main() -> None:
         except ValueError as e:
             print(f"❌ Error: {e}")
             sys.exit(1)
-    elif args.start_date or args.end_date:
+    elif getattr(args, 'start_date', None) or getattr(args, 'end_date', None):
         print("❌ Error: Both --start-date and --end-date must be provided if using CLI flags.")
         sys.exit(1)
     else:
@@ -83,6 +134,44 @@ def main() -> None:
         
     start_dt = parse_date(start_date_str)
     end_dt = parse_date(end_date_str)
+
+    # Standalone post-processing mode for a backfill timeframe
+    if post_processing_only:
+        print(f"\n🚀 Running Post-Processing Only for Backfill Timeframe ({start_date_str} to {end_date_str})...")
+        print("=" * 60)
+        if publish_staging:
+            print("\n" + "=" * 60)
+            print("📦 Post-Processing: Staging Songs (Backfill Scope)")
+            print("=" * 60)
+            copy_songs(
+                PROCESSED_AUDIO_DIR, 
+                STAGING_AUDIO_DIR, 
+                start_date=start_date_str, 
+                end_date=end_date_str
+            )
+            print(f"\n🎧 Songs have been successfully staged in: {STAGING_AUDIO_DIR}")
+
+        if publish_verified:
+            print("\n" + "=" * 60)
+            print("🚚 Post-Processing: Publishing Verified Songs")
+            print("=" * 60)
+            choice = input("Have you verified the recordings are good enough to move to the VERIFIED_AUDIO_DIR? (y/n): ")
+            if choice.strip().lower() == 'y':
+                print("\n🚚 Moving songs to verified directory...")
+                move_songs(STAGING_AUDIO_DIR, VERIFIED_AUDIO_DIR)
+            else:
+                print("\n⏸️ Skipping move to verified directory. They remain in staging.")
+                print("Exiting pipeline to allow audio verification before generating videos.")
+                return
+
+        if make_videos_flag:
+            print("\n" + "=" * 60)
+            print("🎬 Post-Processing: Generating Videos")
+            print("=" * 60)
+            make_videos(VERIFIED_AUDIO_DIR, VIDEOS_DIR, ffmpeg_path=FFMPEG_PATH)
+
+        print("\n🎉 Post-processing completed successfully!")
+        return
 
     print(f"\n🚀 Starting Backfill Orchestrator ({start_date_str} to {end_date_str})...")
     print("=" * 60)
@@ -156,10 +245,42 @@ def main() -> None:
         for fail in failures:
             print(f"  - {fail}")
 
-    if success_count > 0:
+    if success_count > 0 and not (publish_staging or publish_verified or make_videos_flag):
         print("\n💡 Next Steps (Post-Processing):")
         print("To stage, verify, and generate videos for your segmented songs, run:")
-        print("  python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos")
+        print(f"  python3 pipeline_orchestrator.py --publish-staging --start-date {start_date_str} --end-date {end_date_str} --publish-verified --make-videos")
+
+    # Post-processing execution for the backfill timeframe (inclusive)
+    if publish_staging:
+        print("\n" + "=" * 60)
+        print("📦 Post-Processing: Staging Songs (Backfill Scope)")
+        print("=" * 60)
+        copy_songs(
+            PROCESSED_AUDIO_DIR, 
+            STAGING_AUDIO_DIR, 
+            start_date=start_date_str, 
+            end_date=end_date_str
+        )
+        print(f"\n🎧 Songs have been successfully staged in: {STAGING_AUDIO_DIR}")
+
+    if publish_verified:
+        print("\n" + "=" * 60)
+        print("🚚 Post-Processing: Publishing Verified Songs")
+        print("=" * 60)
+        choice = input("Have you verified the recordings are good enough to move to the VERIFIED_AUDIO_DIR? (y/n): ")
+        if choice.strip().lower() == 'y':
+            print("\n🚚 Moving songs to verified directory...")
+            move_songs(STAGING_AUDIO_DIR, VERIFIED_AUDIO_DIR)
+        else:
+            print("\n⏸️ Skipping move to verified directory. They remain in staging.")
+            print("Exiting pipeline to allow audio verification before generating videos.")
+            return
+
+    if make_videos_flag:
+        print("\n" + "=" * 60)
+        print("🎬 Post-Processing: Generating Videos")
+        print("=" * 60)
+        make_videos(VERIFIED_AUDIO_DIR, VIDEOS_DIR, ffmpeg_path=FFMPEG_PATH)
             
 if __name__ == "__main__":
     main()
