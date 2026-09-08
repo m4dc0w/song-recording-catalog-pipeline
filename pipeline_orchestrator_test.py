@@ -289,8 +289,8 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.input')
     @patch('pipeline_orchestrator.prompt_for_plan')
     def test_main_post_processing(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
-        # Option 3 (all dates) for staging date prompt, "y" for move_songs verification
-        mock_input.side_effect = ["3", "y"]
+        # Option 3 (all dates) for staging date prompt, "y" for staging confirmation, "y" for move_songs verification
+        mock_input.side_effect = ["3", "y", "y"]
         
         pipeline_orchestrator.main(["--service-type", "123", "--publish-staging", "--publish-verified", "--make-videos"])
         
@@ -302,9 +302,11 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.copy_songs')
     @patch('pipeline_orchestrator.move_songs')
     @patch('pipeline_orchestrator.make_videos')
+    @patch('pipeline_orchestrator.input')
     @patch('pipeline_orchestrator.prompt_for_plan')
-    def test_main_post_processing_staging_only_with_all_flag(self, mock_prompt_plan, mock_make_videos, mock_move_songs, mock_copy_songs):
+    def test_main_post_processing_staging_only_with_all_flag(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
         """When --publish-staging is passed with --all, date prompting is bypassed and all songs are staged."""
+        mock_input.return_value = "y"
         pipeline_orchestrator.main(["--service-type", "123", "--publish-staging", "--all"])
         
         mock_prompt_plan.assert_not_called()
@@ -323,7 +325,7 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.prompt_for_plan')
     def test_main_post_processing_staging_only_prompts_for_date(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
         """When --publish-staging is passed without date flags, it defaults to prompting for the dates."""
-        mock_input.side_effect = ["1", "2026-09-06"]
+        mock_input.side_effect = ["1", "2026-09-06", "y"]
         pipeline_orchestrator.main(["--service-type", "123", "--publish-staging"])
         
         mock_prompt_plan.assert_not_called()
@@ -457,7 +459,7 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.prompt_for_plan')
     def test_main_post_processing_all_three_steps_prompts_date_once(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
         """When --publish-staging, --publish-verified, and --make-videos are run together, date prompt is asked only once."""
-        mock_input.side_effect = ["1", "2026-09-06", "y"]
+        mock_input.side_effect = ["1", "2026-09-06", "y", "y"]
 
         pipeline_orchestrator.main(["--service-type", "123", "--publish-staging", "--publish-verified", "--make-videos"])
 
@@ -476,13 +478,30 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.prompt_for_plan')
     def test_main_post_processing_declined_verification(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
         """When the user does not enter 'y' to verify songs, move_songs and make_videos must not be executed."""
-        # Option 3 for staging date prompt, "n" for verification prompt
-        mock_input.side_effect = ["3", "n"]
+        # Option 3 for staging date prompt, "y" for staging confirmation, "n" for verification prompt
+        mock_input.side_effect = ["3", "y", "n"]
         
         pipeline_orchestrator.main(["--service-type", "123", "--publish-staging", "--publish-verified", "--make-videos"])
         
         mock_prompt_plan.assert_not_called()
         mock_copy_songs.assert_called_once()
+        mock_move_songs.assert_not_called()
+        mock_make_videos.assert_not_called()
+
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    @patch('pipeline_orchestrator.input')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    def test_main_post_processing_declined_staging(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
+        """When the user does not enter 'y' to stage songs, copy_songs, move_songs, and make_videos must not be executed."""
+        # Option 3 for staging date prompt, "n" for staging confirmation prompt
+        mock_input.side_effect = ["3", "n"]
+        
+        pipeline_orchestrator.main(["--service-type", "123", "--publish-staging", "--publish-verified", "--make-videos"])
+        
+        mock_prompt_plan.assert_not_called()
+        mock_copy_songs.assert_not_called()
         mock_move_songs.assert_not_called()
         mock_make_videos.assert_not_called()
 
@@ -608,8 +627,10 @@ class TestPipelineOrchestrator(unittest.TestCase):
 
     @patch('pipeline_orchestrator.copy_songs')
     @patch('pipeline_orchestrator.fetch_service_plan')
-    def test_main_post_processing_with_date_flag(self, mock_fetch_plan, mock_copy_songs):
+    @patch('pipeline_orchestrator.input')
+    def test_main_post_processing_with_date_flag(self, mock_input, mock_fetch_plan, mock_copy_songs):
         """Standalone post-processing with --date scopes copy_songs to that date without running main pipeline."""
+        mock_input.return_value = "y"
         pipeline_orchestrator.main(["--publish-staging", "--date", "2026-09-06"])
 
         mock_fetch_plan.assert_not_called()
@@ -619,8 +640,10 @@ class TestPipelineOrchestrator(unittest.TestCase):
 
     @patch('pipeline_orchestrator.copy_songs')
     @patch('pipeline_orchestrator.fetch_service_plan')
-    def test_main_post_processing_with_date_range_flags(self, mock_fetch_plan, mock_copy_songs):
+    @patch('pipeline_orchestrator.input')
+    def test_main_post_processing_with_date_range_flags(self, mock_input, mock_fetch_plan, mock_copy_songs):
         """Standalone post-processing with --start-date and --end-date scopes copy_songs to that timeframe."""
+        mock_input.return_value = "y"
         pipeline_orchestrator.main(["--publish-staging", "--start-date", "2026-08-01", "--end-date", "2026-08-31"])
 
         mock_fetch_plan.assert_not_called()

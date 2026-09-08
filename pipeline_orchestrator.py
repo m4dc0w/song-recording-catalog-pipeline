@@ -524,15 +524,23 @@ def main(cli_args: Optional[List[str]] = None) -> None:
                 all_label="stage all songs"
             )
 
-            # Copy to staging directory (scoped to target date or timeframe if provided)
-            copy_songs(
-                PROCESSED_AUDIO_DIR, 
-                STAGING_AUDIO_DIR, 
-                target_date=p_target, 
-                start_date=p_start, 
-                end_date=p_end
-            )
-            print(f"\n🎧 Songs have been successfully staged in: {STAGING_AUDIO_DIR}")
+            choice = input("Are you ready to copy the songs from PROCESSED_AUDIO_DIR to STAGING_AUDIO_DIR? (y/n): ")
+            
+            if choice.strip().lower() == 'y':
+                print("\n📦 Copying songs to staging directory...")
+                # Copy to staging directory (scoped to target date or timeframe if provided)
+                copy_songs(
+                    PROCESSED_AUDIO_DIR, 
+                    STAGING_AUDIO_DIR, 
+                    target_date=p_target, 
+                    start_date=p_start, 
+                    end_date=p_end
+                )
+                print(f"\n🎧 Songs have been successfully staged in: {STAGING_AUDIO_DIR}")
+            else:
+                print("\n⏸️ Skipping copy to staging directory. They remain in processed directory.")
+                print("Exiting pipeline to allow audio verification before staging.")
+                return
 
         # 6. Post-Processing: Publish Verified Songs
         if args.publish_verified:

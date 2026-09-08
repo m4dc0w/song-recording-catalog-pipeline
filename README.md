@@ -108,7 +108,7 @@ When a service date matches multiple raw `.wav` recordings (e.g., split recordin
 After the AI segments the audio, you can run post-processing steps individually or combined to stage, verify, and generate videos.
 
 **Stage Songs (Date-Scoped):**
-Strips the AI numbering prefix (e.g., `Song_01_`) and safely copies files from `PROCESSED_AUDIO_DIR` to your staging area (`STAGING_AUDIO_DIR`).
+Prompts you to confirm before copying songs from `PROCESSED_AUDIO_DIR` to `STAGING_AUDIO_DIR`. It strips the AI numbering prefix (e.g., `Song_01_`) and safely copies files into your staging area without overwriting existing files.
 - When running the interactive pipeline for a single Sunday, `--publish-staging` is **automatically scoped** to copy only that specific Sunday's songs.
 - **Interactive Date Prompt (Default):** If no date flags are passed during standalone post-processing, the orchestrator interactively prompts you to select a single service date, a date range, or all songs:
   ```bash
