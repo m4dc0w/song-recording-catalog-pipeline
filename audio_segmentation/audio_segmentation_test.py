@@ -149,9 +149,10 @@ class TestAudioSegmentation(unittest.TestCase):
     # ==============================================================================
     # 5. PIPELINE EXECUTION & ERROR HANDLING
     # ==============================================================================
+    @patch('audio_segmentation.audio_segmentation.os.listdir')
     @patch('audio_segmentation.audio_segmentation.os.path.exists')
-    def test_segment_service_audio_raises_error_if_output_dir_exists(self, mock_exists) -> None:
-        """Ensures that the pipeline aborts safely if the destination folder already exists to prevent accidental overwrites."""
+    def test_segment_service_audio_raises_error_if_output_dir_exists(self, mock_exists, mock_listdir) -> None:
+        """Ensures that the pipeline aborts safely if the destination folder already exists and is not empty to prevent accidental overwrites."""
         # Setup the mock to return True for the raw audio file, and True for the output directory
         def side_effect(path):
             if "R_20260906" in path: # Simulate raw audio exists
@@ -161,6 +162,7 @@ class TestAudioSegmentation(unittest.TestCase):
             return False
             
         mock_exists.side_effect = side_effect
+        mock_listdir.return_value = ["Song_01_Amazing Grace - 2026-09-06.wav"]
         
         plan = ServicePlan(
             date="2026-09-06",
@@ -168,8 +170,49 @@ class TestAudioSegmentation(unittest.TestCase):
             raw_audio_filepath="/mock/raw_audio/R_20260906-103109.wav"
         )
         
-        with self.assertRaisesRegex(FileExistsError, "Destination folder already exists"):
+        with self.assertRaisesRegex(FileExistsError, "Destination folder already exists and is not empty"):
             segment_service_audio(plan)
+
+    @patch('audio_segmentation.audio_segmentation.os.listdir')
+    @patch('audio_segmentation.audio_segmentation.os.path.exists')
+    @patch('audio_segmentation.audio_segmentation.os.makedirs')
+    @patch('audio_segmentation.audio_segmentation.os.remove')
+    @patch('audio_segmentation.audio_segmentation.compress_wav_to_mp3')
+    @patch('audio_segmentation.audio_segmentation.genai.Client')
+    @patch('audio_segmentation.audio_segmentation.slice_audio_ffmpeg_copy')
+    @patch('builtins.open', new_callable=mock_open)
+    def test_segment_service_audio_allows_empty_output_dir(self, mock_file, mock_slice, mock_genai_client, mock_compress, mock_remove, mock_makedirs, mock_exists, mock_listdir) -> None:
+        """Ensures that an existing empty directory (or one containing only .DS_Store) does not raise FileExistsError."""
+        def side_effect(path):
+            if "Output_R_20260906-103109" in path:
+                return True
+            if "R_20260906" in path:
+                return True
+            return False
+
+        mock_exists.side_effect = side_effect
+        mock_listdir.return_value = [".DS_Store"]
+
+        mock_client_instance = MagicMock()
+        mock_genai_client.return_value = mock_client_instance
+        mock_audio_file = MagicMock()
+        mock_audio_file.state.name = "ACTIVE"
+        mock_audio_file.name = "mock_file_name"
+        mock_client_instance.files.upload.return_value = mock_audio_file
+
+        mock_response = MagicMock()
+        mock_response.text = '{"step_1_audio_analysis": "", "step_2_self_critique": "", "final_segments": []}'
+        mock_client_instance.models.generate_content.return_value = mock_response
+
+        plan = ServicePlan(
+            date="2026-09-06",
+            songs=[],
+            raw_audio_filepath="/mock/raw_audio/R_20260906-103109.wav"
+        )
+
+        # Should not raise FileExistsError
+        segment_service_audio(plan)
+        mock_makedirs.assert_called_with(mock_makedirs.call_args[0][0], exist_ok=True)
 
 
 

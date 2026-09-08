@@ -172,9 +172,11 @@ def segment_service_audio(plan: ServicePlan) -> None:
     output_dir = os.path.join(PROCESSED_AUDIO_DIR, f"Output_{base_filename}")
     
     if os.path.exists(output_dir):
-        raise FileExistsError(f"Destination folder already exists: {output_dir}")
+        existing_contents = [f for f in os.listdir(output_dir) if f != ".DS_Store"]
+        if existing_contents:
+            raise FileExistsError(f"Destination folder already exists and is not empty: {output_dir}")
         
-    os.makedirs(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
     
     # Step A: Create Lightweight MP3 Preview
     temp_mp3_path = f"temp_{base_filename}.mp3"
