@@ -82,7 +82,7 @@ def time_to_ms(time_str: str) -> int:
 
 def compress_wav_to_mp3(input_wav: str, output_mp3: str) -> None:
     """Creates a 192kbps stereo MP3 preview to reduce upload bandwidth and API latency."""
-    print(f"Compressing raw WAV to 64kbps mono MP3 preview...")
+    print(f"Compressing raw WAV to 192kbps mono MP3 preview...")
     command = [
         FFMPEG_PATH, "-y",
         "-i", input_wav,
