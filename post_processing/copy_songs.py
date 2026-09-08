@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import os
 import shutil
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
 
 def parse_date_str(date_str: Optional[str]) -> Optional[datetime]:
     """Parses a date string in YYYY-MM-DD or YYYYMMDD format."""
@@ -59,6 +61,33 @@ def extract_date_from_file(file_path: Path, src_dir: Path) -> Optional[datetime]
         pass
 
     return None
+
+def format_duplicate_song_name(clean_filename: str, index: int) -> str:
+    """
+    Appends an index suffix (e.g. ' (2)') to the song title for duplicate songs.
+    If index <= 1, returns the clean filename unchanged.
+    
+    If the filename contains a date at the end (e.g. 'Title - YYYY-MM-DD.wav'),
+    the suffix is placed on the song title before the date:
+      'Title (2) - YYYY-MM-DD.wav'
+    Otherwise:
+      'Title (2).wav'
+    """
+    if index <= 1:
+        return clean_filename
+
+    stem = Path(clean_filename).stem
+    ext = Path(clean_filename).suffix
+
+    # Match trailing dates like ' - YYYY-MM-DD' or ' - YYYYMMDD'
+    date_pattern = re.compile(r'^(.*?)\s*-\s*(\d{4}-\d{2}-\d{2}(?:-\d+)?|\d{8})$')
+    m = date_pattern.match(stem)
+    if m:
+        title = m.group(1).strip()
+        date_part = m.group(2).strip()
+        return f"{title} ({index}) - {date_part}{ext}"
+    else:
+        return f"{stem} ({index}){ext}"
 
 def copy_songs(
     src_dir: str, 
@@ -138,13 +167,28 @@ def copy_songs(
             print("No matching 'Song_XX_*.wav' files found.")
         return
 
+    # Sort files chronologically: by parent directory, then track number, then filename
+    def get_sort_key(p: Path):
+        m = re.match(r"^Song_(\d+)_", p.name)
+        track_num = int(m.group(1)) if m else 0
+        return (str(p.parent), track_num, p.name)
+
+    matched_files.sort(key=get_sort_key)
+
     copied_count = 0
+    clean_name_counts: Dict[str, int] = {}
 
     for file_path in matched_files:
         base_name = file_path.name
         
-        # Strip the prefix
-        new_name = pattern.sub("", base_name)
+        # Strip the 'Song_XX_' prefix
+        raw_clean_name = pattern.sub("", base_name)
+        
+        # Track occurrence index for duplicate titles in this service/batch
+        clean_name_counts[raw_clean_name] = clean_name_counts.get(raw_clean_name, 0) + 1
+        occurrence_idx = clean_name_counts[raw_clean_name]
+
+        new_name = format_duplicate_song_name(raw_clean_name, occurrence_idx)
         dest_path = os.path.join(dest_dir, new_name)
         
         # Copy without overwriting
