@@ -1,7 +1,7 @@
 import os
-import glob
 import shutil
 import re
+from pathlib import Path
 
 def copy_verified_songs(src_dir: str, dest_dir: str) -> None:
     """
@@ -19,20 +19,21 @@ def copy_verified_songs(src_dir: str, dest_dir: str) -> None:
     print(f"Copying to: {dest_dir}")
     print("-" * 48)
 
-    # Use glob to find all matching files recursively
-    # glob with recursive=True requires **
-    search_pattern = os.path.join(src_dir, "**", "Song_\d+_*.wav")
-    matched_files = glob.glob(search_pattern, recursive=True)
+    # Use pathlib to find files recursively, then strictly filter with regex
+    src_path = Path(src_dir)
+    potential_files = src_path.rglob("Song_*.wav")
+    
+    pattern = re.compile(r"^Song_\d+_")
+    matched_files = [f for f in potential_files if pattern.match(f.name)]
     
     if not matched_files:
         print("No matching 'Song_XX_*.wav' files found.")
         return
 
     copied_count = 0
-    pattern = re.compile(r"^Song_\d+_")
 
     for file_path in matched_files:
-        base_name = os.path.basename(file_path)
+        base_name = file_path.name
         
         # Strip the prefix
         new_name = pattern.sub("", base_name)
