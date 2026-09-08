@@ -103,6 +103,27 @@ python3 pipeline_orchestrator.py --publish-verified --make-videos
 
 *(Note: Ensure an image exists at `assets/images/background.png` or specify a custom path in the code for video generation to work.)*
 
+### 3. Batch Processing / Backfilling
+
+If you have a large archive of historical raw recordings and want to process them all at once, you can use the dedicated backfill orchestrator:
+
+```bash
+python3 pipeline_orchestrator_backfill.py
+```
+
+* **What it does:** 
+  1. Interactively prompts you for a `Start Date` and `End Date` (YYYY-MM-DD).
+  2. Fetches up to 50 recent plans from Planning Center and filters them down to your specified timeframe.
+  3. Automatically searches your `RAW_AUDIO_DIR` for matching `.wav` files.
+  4. Sequentially executes the Gemini AI segmentation on every matched date, wrapped in a fault-tolerant `try/except` loop so a single failure doesn't halt the entire batch.
+  5. Respects API rate limits automatically by pausing between plans.
+  6. Prints a final summary report of all successful and failed processing dates.
+
+*Optional Overrides:*
+```bash
+python3 pipeline_orchestrator_backfill.py --start-date "2026-01-01" --end-date "2026-12-31" --limit 100
+```
+
 ---
 
 ## 🧪 Testing

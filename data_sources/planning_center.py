@@ -1,6 +1,6 @@
 import os
-from typing import List, Dict, Any
-
+import time
+from typing import List, Dict, Any, Optional
 import requests
 from dotenv import load_dotenv
 
@@ -16,6 +16,31 @@ PCO_APP_ID: str = os.getenv("PCO_APP_ID", "")
 PCO_SECRET: str = os.getenv("PCO_SECRET", "")
 PCO_BASE_URL: str = "https://api.planningcenteronline.com/services/v2"
 
+
+def _make_pco_request(url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Helper function to make a GET request to the Planning Center API.
+    Automatically handles rate limits (HTTP 429) by respecting the Retry-After header.
+    """
+    if not PCO_APP_ID or not PCO_SECRET:
+        raise ValueError("ERROR: Planning Center credentials missing in .env.")
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        response = requests.get(url, auth=(PCO_APP_ID, PCO_SECRET), params=params, timeout=15)
+        
+        if response.status_code == 429:
+            retry_after = int(response.headers.get("Retry-After", 20))
+            print(f"⚠️ PCO Rate Limit hit. Sleeping for {retry_after} seconds before retrying...")
+            time.sleep(retry_after)
+            continue
+            
+        response.raise_for_status()
+        return response.json()
+        
+    raise requests.exceptions.HTTPError("Exceeded maximum retries for rate limits.")
+
+
 def fetch_service_types() -> List[ServiceType]:
     """Fetches a list of all available service types for the organization.
     
@@ -26,17 +51,11 @@ def fetch_service_types() -> List[ServiceType]:
         ValueError: If PCO credentials are not found.
         requests.exceptions.HTTPError: If the API request fails.
     """
-    if not PCO_APP_ID or not PCO_SECRET:
-        raise ValueError("ERROR: Planning Center credentials missing in .env.")
-
     url: str = f"{PCO_BASE_URL}/service_types"
     
     print("📡 Fetching service types from Planning Center...")
+    data = _make_pco_request(url)
     
-    response = requests.get(url, auth=(PCO_APP_ID, PCO_SECRET), timeout=15)
-    response.raise_for_status()
-    
-    data: Dict[str, Any] = response.json()
     service_types: List[ServiceType] = []
     
     for item in data.get("data", []):
@@ -74,21 +93,12 @@ def fetch_service_plan(
         ValueError: If PCO credentials are not found in the environment.
         requests.exceptions.HTTPError: If the API request fails (e.g., 401 or 404).
     """
-    if not PCO_APP_ID or not PCO_SECRET:
-        raise ValueError(
-            "ERROR: Planning Center credentials missing. "
-            "Please define PCO_APP_ID and PCO_SECRET in your .env file."
-        )
-
     # Endpoint to retrieve all items within a specific service plan
     url: str = f"{PCO_BASE_URL}/service_types/{service_type_id}/plans/{plan_id}/items"
     
     print(f"📡 Fetching Planning Center data for Plan ID: {plan_id}...")
+    data = _make_pco_request(url)
     
-    response = requests.get(url, auth=(PCO_APP_ID, PCO_SECRET), timeout=15)
-    response.raise_for_status()
-    
-    data: Dict[str, Any] = response.json()
     songs: List[Song] = []
 
     # Iterate through the timeline items
@@ -113,41 +123,49 @@ def fetch_service_plan(
 def fetch_recent_plans(service_type_id: str, limit: int = 5) -> List[PlanSummary]:
     """Fetches a list of the most recent service plans for a given service type.
     
+    Handles Planning Center's API pagination automatically to retrieve up to the requested limit.
+    
     Args:
         service_type_id (str): The PCO Service Type ID.
-        limit (int): The number of recent plans to retrieve.
+        limit (int): The maximum number of recent plans to retrieve.
         
     Returns:
         List[PlanSummary]: A list of PlanSummary dataclasses containing id, dates, and title.
-            
+        
     Raises:
         ValueError: If PCO credentials are not found.
         requests.exceptions.HTTPError: If the API request fails.
     """
-    if not PCO_APP_ID or not PCO_SECRET:
-        raise ValueError("ERROR: Planning Center credentials missing in .env.")
-
     url: str = f"{PCO_BASE_URL}/service_types/{service_type_id}/plans"
-    params = {"per_page": limit, "order": "-sort_date"}
     
-    print("📡 Fetching recent plans from Planning Center...")
+    # We will fetch up to 100 per page to minimize API calls (PCO max is usually 100)
+    per_page = min(limit, 100)
+    params = {"per_page": per_page, "order": "-sort_date"}
     
-    response = requests.get(url, auth=(PCO_APP_ID, PCO_SECRET), params=params, timeout=15)
-    response.raise_for_status()
-    
-    data: Dict[str, Any] = response.json()
+    print(f"📡 Fetching up to {limit} recent plans from Planning Center...")
     recent_plans: List[PlanSummary] = []
     
-    for item in data.get("data", []):
-        plan_id = item.get("id", "")
-        attributes = item.get("attributes", {})
+    while url and len(recent_plans) < limit:
+        data = _make_pco_request(url, params=params)
         
-        recent_plans.append(
-            PlanSummary(
-                id=plan_id,
-                dates=attributes.get("dates", "Unknown Date"),
-                title=attributes.get("title") or ""
+        for item in data.get("data", []):
+            plan_id = item.get("id", "")
+            attributes = item.get("attributes", {})
+            
+            recent_plans.append(
+                PlanSummary(
+                    id=plan_id,
+                    dates=attributes.get("dates", "Unknown Date"),
+                    title=attributes.get("title") or ""
+                )
             )
-        )
+            
+            if len(recent_plans) >= limit:
+                break
+                
+        # Handle pagination for the next request
+        links = data.get("links", {})
+        url = links.get("next", None)
+        params = None # Query params like per_page and offset are embedded in the 'next' URL
         
     return recent_plans
