@@ -132,6 +132,12 @@ python3 pipeline_orchestrator_backfill.py
 python3 pipeline_orchestrator_backfill.py --start-date "2026-01-01" --end-date "2026-12-31" --limit 100
 ```
 
+* **Next Steps After Backfill:**
+Once backfilling is complete and you have verified the sliced audio files in `PROCESSED_AUDIO_DIR`, proceed to **[Post-Processing: Publishing & Video Generation](#2-post-processing-publishing--video-generation)** to stage, verify, and generate videos for the entire batch:
+```bash
+python3 pipeline_orchestrator.py --publish-verified --make-videos
+```
+
 ---
 
 ## 🧪 Testing
