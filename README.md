@@ -157,9 +157,55 @@ python3 pipeline_orchestrator.py --publish-verified --make-videos
 
 ## 🧪 Testing
 
-The project includes a robust unit testing suite (24+ tests) covering API interactions, timestamp math, string sanitization, hallucination prevention logic, file operations, and dynamic FFmpeg command construction.
+The project includes a robust unit testing suite (50+ tests) covering API interactions, timestamp math, string sanitization, hallucination prevention logic, file operations, and dynamic FFmpeg command construction.
 
 To run the entire test suite across the repository, use the included test runner:
 ```bash
 python3 run_tests.py
 ```
+
+---
+
+## 💻 Development Workflow (Google AI Studio Build)
+
+This repository is optimized for rapid development and maintenance using **[Google AI Studio Build](https://aistudio.google.com/build)**. You can import, edit, test, and sync this codebase directly in the cloud using natural language prompts powered by Gemini.
+
+### 1. Importing the Repository into Google AI Studio
+1. Navigate to [aistudio.google.com/build](https://aistudio.google.com/build).
+2. Click **New App** or **Import** and select **Import from GitHub**.
+3. Authorize your GitHub account (if not already connected) and select this repository.
+4. Choose the target branch (e.g., `main`) to load the workspace. AI Studio will automatically provision a full-stack container environment with Python, Node.js, and audio dependencies pre-configured.
+
+### 2. Environment Variables & Secrets Configuration
+* **Never commit secrets to GitHub.**
+* In AI Studio, open **Settings** (gear icon) or the **Secrets** panel to configure required environment variables:
+  * `GEMINI_API_KEY`: Your Google Gemini API key.
+  * `PCO_APP_ID`: Planning Center Online Application ID.
+  * `PCO_SECRET`: Planning Center Online Secret key.
+  * `RAW_AUDIO_DIR`, `PROCESSED_AUDIO_DIR`, `STAGING_AUDIO_DIR`, `VERIFIED_AUDIO_DIR`: Set paths appropriate for your environment or mounted storage.
+* Refer to `.env.example` for all configurable variables and documentation.
+
+### 3. Iterating and Coding with Gemini Prompts
+You can direct Gemini in the chat interface to modify logic, implement new features, or fix bugs:
+* **Targeted Prompts:** Highlight code in the editor or mention specific files and functions (e.g., *"In `pipeline_orchestrator.py`, add support for..."*).
+* **Test-Driven Modifications:** Ask Gemini to write unit tests alongside feature changes to verify functionality.
+* **Automated Verification:** Prompt Gemini to execute `python3 run_tests.py` after edits to ensure that all unit tests pass without regressions before completing the task.
+
+### 4. Reviewing Changes with the Diff Viewer
+Before committing or exporting your work, inspect the modifications using the built-in Diff Viewer:
+1. Click the **Review PR / Diff Viewer** tab or button in the upper workspace navigation.
+2. Review the side-by-side or unified visual diff of all modified, added, or deleted files.
+3. Verify that only intentional changes and functional artifacts are staged (and that no scratch files or secrets were created).
+
+### 5. Committing and Creating a Pull Request (Push to GitHub)
+Once you have reviewed the changes and verified that all tests pass:
+1. In the top-right header, click **Export** and select **Push to GitHub**.
+2. Select your destination:
+   * **Create a new branch & Pull Request (Recommended):** Enter a descriptive branch name and PR title/description. AI Studio will push the branch and open a Pull Request directly on GitHub.
+   * **Commit directly to current branch:** Push changes straight to your existing working branch.
+3. Click **Push** to sync your changes with GitHub.
+
+### 6. Best Practices & Persistent AI Guidelines (`AGENTS.md`)
+* **Project Rules:** AI Studio automatically reads `AGENTS.md` and `GEMINI.md` at the root of the repository to enforce coding standards, directory conventions, and testing requirements across all AI assistant turns.
+* **No Scratch Files:** Per `AGENTS.md`, temporary test scripts should never be committed to the repository root. Always run inline experiments or write to `/tmp/`.
+* **Always Run Tests:** Run `python3 run_tests.py` before exporting to ensure zero regressions across the test suite.
