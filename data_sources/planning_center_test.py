@@ -143,7 +143,7 @@ class TestPlanningCenterAPI(unittest.TestCase):
         # Assertions
         mock_get.assert_called_once()
         self.assertIn("service_types/123/plans", mock_get.call_args[0][0])
-        self.assertEqual(mock_get.call_args[1]["params"], {"per_page": 2, "order": "-sort_date"})
+        self.assertEqual(mock_get.call_args[1]["params"], {"per_page": 2, "order": "-sort_date", "filter": "past"})
         
         self.assertEqual(len(recent_plans), 2)
         

@@ -140,7 +140,7 @@ def fetch_recent_plans(service_type_id: str, limit: int = 5) -> List[PlanSummary
     
     # We will fetch up to 100 per page to minimize API calls (PCO max is usually 100)
     per_page = min(limit, 100)
-    params = {"per_page": per_page, "order": "-sort_date"}
+    params = {"per_page": per_page, "order": "-sort_date", "filter": "past"}
     
     print(f"📡 Fetching up to {limit} recent plans from Planning Center...")
     recent_plans: List[PlanSummary] = []
