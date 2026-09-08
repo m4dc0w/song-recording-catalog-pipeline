@@ -4,10 +4,11 @@ import argparse
 from datetime import datetime
 from dotenv import load_dotenv
 
-from data_sources.planning_center import fetch_service_plan, fetch_recent_plans
+from data_sources.planning_center import fetch_service_plan, fetch_recent_plans, fetch_service_types
 from data_sources.local_drive import discover_raw_audio
 from audio_segmentation.audio_segmentation import segment_service_audio
-from post_processing.copy_songs import copy_verified_songs
+from post_processing.copy_songs import copy_songs
+from post_processing.move_songs import move_songs
 from post_processing.make_videos import make_videos
 
 # Load environment variables
@@ -16,10 +17,38 @@ load_dotenv()
 # Configure fallbacks
 RAW_AUDIO_DIR: str = os.getenv("RAW_AUDIO_DIR", os.path.join(os.getcwd(), "raw_audio"))
 PROCESSED_AUDIO_DIR: str = os.getenv("PROCESSED_AUDIO_DIR", os.path.join(os.getcwd(), "processed_audio"))
+STAGING_AUDIO_DIR: str = os.getenv("STAGING_AUDIO_DIR", os.path.join(os.getcwd(), "staging_audio"))
 VERIFIED_AUDIO_DIR: str = os.getenv("VERIFIED_AUDIO_DIR", os.path.join(os.getcwd(), "verified_audio"))
 VIDEOS_DIR: str = os.getenv("VIDEOS_DIR", os.path.join(VERIFIED_AUDIO_DIR, "Videos"))
 DEFAULT_SERVICE_TYPE: str = os.getenv("PCO_SERVICE_TYPE_ID", "")
 FFMPEG_PATH: str = os.getenv("FFMPEG_PATH", "ffmpeg")
+
+
+def prompt_for_service_type() -> str:
+    """Provides an interactive CLI menu to select a Service Type if not provided in .env."""
+    service_types = fetch_service_types()
+    
+    if not service_types:
+        print("❌ No Service Types found for this Planning Center account.")
+        sys.exit(1)
+        
+    print("\n📋 Planning Center Service Types:")
+    print("-" * 40)
+    for idx, st in enumerate(service_types, start=1):
+        print(f"  [{idx}] {st.name}")
+    print("-" * 40)
+    
+    while True:
+        try:
+            choice = input(f"Select a service type [1-{len(service_types)}]: ")
+            selected_idx = int(choice) - 1
+            
+            if 0 <= selected_idx < len(service_types):
+                return service_types[selected_idx].id
+            else:
+                print("Invalid selection. Please try again.")
+        except ValueError:
+            print("Please enter a valid number.")
 
 
 def prompt_for_plan(service_type_id: str) -> tuple[str, str]:
@@ -99,18 +128,20 @@ def main() -> None:
     
     args = parser.parse_args()
 
-    if not args.service_type:
-        print("❌ Error: --service-type not provided and PCO_SERVICE_TYPE_ID is missing from .env.")
-        return
+    # Determine Service Type (CLI -> .env -> Interactive Menu)
+    service_type = args.service_type
+    
+    # We only prompt for service type if we are actually running the main pipeline
+    run_main_pipeline = not (args.publish_verified or args.make_videos) or args.plan_id or args.date or args.audio_file
+    
+    if run_main_pipeline and not service_type:
+        print("\n🔍 No Service Type ID provided in .env or arguments. Let's find it...")
+        service_type = prompt_for_service_type()
 
     print("\n🚀 Starting Pipeline Orchestrator...")
     print("=" * 50)
     
     try:
-        # Check if we should run the main segmentation pipeline
-        # (Run it if no post-processing flags are set, or if they explicitly provided plan arguments)
-        run_main_pipeline = not (args.publish_verified or args.make_videos) or args.plan_id or args.date or args.audio_file
-        
         if run_main_pipeline:
             # 1. Resolve Plan ID and Date (Interactive Menu or CLI Flags)
             if args.plan_id and args.date:
@@ -120,13 +151,13 @@ def main() -> None:
                 print("❌ Error: Both --plan-id and --date must be provided together if bypassing the menu.")
                 return
             else:
-                target_plan_id, target_date = prompt_for_plan(args.service_type)
+                target_plan_id, target_date = prompt_for_plan(service_type)
                 
             print(f"\n✅ Target Date locked: {target_date}")
             print("=" * 50)
     
             # 2. Fetch the specific setlist from Planning Center
-            plan = fetch_service_plan(args.service_type, target_plan_id, target_date)
+            plan = fetch_service_plan(service_type, target_plan_id, target_date)
             
             # 3. Handle raw audio filepath binding (Optional CLI override vs Automated Discovery)
             raw_audio_files = []
@@ -160,9 +191,21 @@ def main() -> None:
         # 5. Post-Processing: Publish Verified Songs
         if args.publish_verified:
             print("\n" + "=" * 50)
-            print("📦 Post-Processing: Publishing Verified Songs")
+            print("📦 Post-Processing: Staging and Publishing Songs")
             print("=" * 50)
-            copy_verified_songs(PROCESSED_AUDIO_DIR, VERIFIED_AUDIO_DIR)
+            
+            # Copy to staging directory first
+            copy_songs(PROCESSED_AUDIO_DIR, STAGING_AUDIO_DIR)
+            
+            print(f"\n🎧 Songs have been successfully staged in: {STAGING_AUDIO_DIR}")
+            choice = input("Have you verified the recordings are good enough to move to the VERIFIED_AUDIO_DIR? (y/n): ")
+            
+            if choice.strip().lower() == 'y':
+                print("\n🚚 Moving songs to verified directory...")
+                move_songs(STAGING_AUDIO_DIR, VERIFIED_AUDIO_DIR)
+            else:
+                print("\n⏸️ Skipping move to verified directory. They remain in staging.")
+            
             
         # 6. Post-Processing: Generate Videos
         if args.make_videos:

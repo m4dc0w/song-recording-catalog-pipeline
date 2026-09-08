@@ -3,7 +3,7 @@ import shutil
 import re
 from pathlib import Path
 
-def copy_verified_songs(src_dir: str, dest_dir: str) -> None:
+def copy_songs(src_dir: str, dest_dir: str) -> None:
     """
     Finds all 'Song_XX_*.wav' files in the source directory (recursively),
     strips the 'Song_XX_' prefix, and copies them to the destination directory.

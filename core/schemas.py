@@ -68,3 +68,9 @@ class ServicePlan:
     songs: List[Song] = field(default_factory=list)
     sermon: Optional[Sermon] = None
     raw_audio_filepath: Optional[str] = None
+
+@dataclass
+class ServiceType:
+    """A representation of a Planning Center Service Type."""
+    id: str
+    name: str

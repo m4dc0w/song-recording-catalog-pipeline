@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 import requests
 from dotenv import load_dotenv
 
-from core.schemas import ServicePlan, Song, PlanSummary
+from core.schemas import ServicePlan, Song, PlanSummary, ServiceType
 
 # Load variables from .env file into the environment
 load_dotenv()
@@ -15,6 +15,42 @@ load_dotenv()
 PCO_APP_ID: str = os.getenv("PCO_APP_ID", "")
 PCO_SECRET: str = os.getenv("PCO_SECRET", "")
 PCO_BASE_URL: str = "https://api.planningcenteronline.com/services/v2"
+
+def fetch_service_types() -> List[ServiceType]:
+    """Fetches a list of all available service types for the organization.
+    
+    Returns:
+        List[ServiceType]: A list of ServiceType dataclasses containing id and name.
+        
+    Raises:
+        ValueError: If PCO credentials are not found.
+        requests.exceptions.HTTPError: If the API request fails.
+    """
+    if not PCO_APP_ID or not PCO_SECRET:
+        raise ValueError("ERROR: Planning Center credentials missing in .env.")
+
+    url: str = f"{PCO_BASE_URL}/service_types"
+    
+    print("📡 Fetching service types from Planning Center...")
+    
+    response = requests.get(url, auth=(PCO_APP_ID, PCO_SECRET), timeout=15)
+    response.raise_for_status()
+    
+    data: Dict[str, Any] = response.json()
+    service_types: List[ServiceType] = []
+    
+    for item in data.get("data", []):
+        st_id = item.get("id", "")
+        attributes = item.get("attributes", {})
+        
+        service_types.append(
+            ServiceType(
+                id=st_id,
+                name=attributes.get("name") or "Unknown Service Type"
+            )
+        )
+        
+    return service_types
 
 
 def fetch_service_plan(
