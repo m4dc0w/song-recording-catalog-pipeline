@@ -3,6 +3,7 @@ import subprocess
 import json
 import shutil
 import tempfile
+import wave
 
 def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "background.png", ffmpeg_path: str = "ffmpeg") -> None:
     """
@@ -82,13 +83,26 @@ def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "background.pn
                 print(f"  -> Error: Could not analyze audio dynamics for {song_title}. Skipping.")
                 continue
 
-            print("  -> Pass 2: Rendering final video with OLED-safe text and 320k audio...")
+            print("  -> Pass 2: Rendering final video with OLED-safe text, crossfades, and 320k audio...")
+            
+            # Calculate duration to set the fade-out start time
+            with wave.open(full_audio_path, 'r') as wav:
+                frames = wav.getnframes()
+                rate = wav.getframerate()
+                duration = frames / float(rate)
+            
+            fade_s = 3.0
+            fade_out_start = max(0, duration - fade_s)
+            
+            loudnorm_filter = f"loudnorm=I=-14:TP=-1:measured_I={measured_i}:measured_TP={measured_tp}:measured_LRA={measured_lra}:measured_thresh={measured_thresh}:offset={target_offset}:linear=true"
+            fade_filter = f"afade=t=in:st=0:d={fade_s},afade=t=out:st={fade_out_start:.3f}:d={fade_s}"
+            
             pass2_cmd = [
                 ffmpeg_path, "-y", "-hide_banner", "-loop", "1", "-framerate", "30",
                 "-i", bg_image_path,
                 "-i", full_audio_path,
                 "-vf", f"drawtext=textfile={temp_txt_path}:line_spacing=20:fontcolor=white@0.8:fontsize=96:shadowcolor=black@0.7:shadowx=4:shadowy=4:x=(w-text_w)/2:y=(h-text_h)/2",
-                "-af", f"loudnorm=I=-14:TP=-1:measured_I={measured_i}:measured_TP={measured_tp}:measured_LRA={measured_lra}:measured_thresh={measured_thresh}:offset={target_offset}:linear=true",
+                "-af", f"{loudnorm_filter},{fade_filter}",
                 "-c:v", "libx264", "-tune", "stillimage",
                 "-c:a", "aac", "-b:a", "320k",
                 "-pix_fmt", "yuv420p", "-shortest",
