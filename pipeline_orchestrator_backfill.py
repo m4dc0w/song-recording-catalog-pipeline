@@ -3,7 +3,7 @@ import sys
 import argparse
 import time
 from datetime import datetime
-from typing import Tuple
+from typing import Tuple, Optional
 
 from data_sources.planning_center import fetch_recent_plans, fetch_service_plan
 from data_sources.local_drive import discover_raw_audio
@@ -29,7 +29,7 @@ def prompt_for_dates() -> Tuple[str, str]:
         except ValueError as e:
             print(f"Error: {e}. Please try again.")
 
-def parse_pco_date(pco_date_str: str) -> datetime | None:
+def parse_pco_date(pco_date_str: str) -> Optional[datetime]:
     try:
         return datetime.strptime(pco_date_str, "%B %d, %Y")
     except ValueError:
