@@ -78,7 +78,7 @@ class TestPipelineOrchestratorBackfill(unittest.TestCase):
         
         mock_prompt_st.assert_called_once()
         mock_prompt_dates.assert_called_once()
-        mock_fetch_recent.assert_called_once_with("123", limit=100)
+        mock_fetch_recent.assert_called_once_with("123", limit=100, start_date="2026-09-01", end_date="2026-09-30")
         
         # Called for Sept 6 and Sept 13
         self.assertEqual(mock_discover.call_count, 2)
@@ -123,7 +123,7 @@ class TestPipelineOrchestratorBackfill(unittest.TestCase):
                     with patch('pipeline_orchestrator_backfill.fetch_recent_plans', return_value=[]) as mock_fetch:
                         with self.assertRaises(SystemExit):
                             pipeline_orchestrator_backfill.main()
-                        mock_fetch.assert_called_once_with("123", limit=100)
+                        mock_fetch.assert_called_once_with("123", limit=100, start_date="2026-09-01", end_date="2026-09-30")
 
     @patch('pipeline_orchestrator_backfill.fetch_recent_plans')
     @patch('pipeline_orchestrator_backfill.discover_raw_audio')

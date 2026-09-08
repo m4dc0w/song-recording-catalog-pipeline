@@ -149,8 +149,14 @@ def prompt_for_plan(
     Returns:
         tuple[str, str] or List[tuple[str, str]]: (plan_id, service_date) or list of (plan_id, service_date)
     """
-    fetch_limit = limit if limit is not None else (50 if (target_date or (start_date and end_date)) else 5)
-    plans = fetch_recent_plans(service_type_id, limit=fetch_limit)
+    fetch_limit = limit if limit is not None else (100 if (target_date or (start_date and end_date)) else 5)
+    plans = fetch_recent_plans(
+        service_type_id,
+        limit=fetch_limit,
+        target_date=target_date,
+        start_date=start_date,
+        end_date=end_date
+    )
     
     if not plans:
         print("❌ No recent plans found for this Service Type.")
@@ -289,6 +295,12 @@ def main(cli_args: Optional[List[str]] = None) -> None:
         help="Service date (YYYY-MM-DD). Required if --plan-id is provided manually."
     )
     parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of historical plans to fetch from PCO before filtering (Default: 5 for recent menu, 100 for date searches)."
+    )
+    parser.add_argument(
         "--audio-file", 
         help="Optional specific filename of the raw .wav recording inside RAW_AUDIO_DIR. If omitted, automatic date matching and file stitching is used."
     )
@@ -396,15 +408,19 @@ def main(cli_args: Optional[List[str]] = None) -> None:
                 print("❌ Error: Both --plan-id and --date must be provided together if specifying a plan ID manually.")
                 return
             else:
+                prompt_kwargs = {}
+                if args.limit is not None:
+                    prompt_kwargs["limit"] = args.limit
+
                 if args.date or (args.start_date and args.end_date):
-                    prompt_res = prompt_for_plan(
-                        service_type,
-                        target_date=args.date,
-                        start_date=args.start_date,
-                        end_date=args.end_date
-                    )
+                    prompt_kwargs.update({
+                        "target_date": args.date,
+                        "start_date": args.start_date,
+                        "end_date": args.end_date
+                    })
+                    prompt_res = prompt_for_plan(service_type, **prompt_kwargs)
                 else:
-                    prompt_res = prompt_for_plan(service_type)
+                    prompt_res = prompt_for_plan(service_type, **prompt_kwargs)
                 if isinstance(prompt_res, list):
                     target_plans = prompt_res
                 else:

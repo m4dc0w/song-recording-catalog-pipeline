@@ -52,6 +52,24 @@ class TestPipelineOrchestrator(unittest.TestCase):
 
     @patch('pipeline_orchestrator.fetch_recent_plans')
     @patch('pipeline_orchestrator.input')
+    def test_prompt_for_plan_with_explicit_limit(self, mock_input, mock_fetch_recent_plans):
+        plan1 = MagicMock(id="456", dates="September 6, 2026", title="Morning Service")
+        mock_fetch_recent_plans.return_value = [plan1]
+        mock_input.return_value = "1"
+
+        result = pipeline_orchestrator.prompt_for_plan("123", limit=250, target_date="2026-09-06")
+
+        self.assertEqual(result, ("456", "2026-09-06"))
+        mock_fetch_recent_plans.assert_called_once_with(
+            "123",
+            limit=250,
+            target_date="2026-09-06",
+            start_date=None,
+            end_date=None
+        )
+
+    @patch('pipeline_orchestrator.fetch_recent_plans')
+    @patch('pipeline_orchestrator.input')
     def test_prompt_for_plan_with_target_date_all_option(self, mock_input, mock_fetch_recent_plans):
         plan1 = MagicMock(id="456", dates="September 6, 2026", title="9 AM Service")
         plan2 = MagicMock(id="457", dates="September 6, 2026", title="11 AM Service")

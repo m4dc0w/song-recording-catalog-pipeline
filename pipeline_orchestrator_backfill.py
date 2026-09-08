@@ -198,7 +198,12 @@ def main(cli_args: Optional[List[str]] = None) -> None:
     print(f"\n🚀 Starting Backfill Orchestrator ({start_date_str} to {end_date_str})...")
     print("=" * 60)
     
-    plans = fetch_recent_plans(service_type, limit=args.limit)
+    plans = fetch_recent_plans(
+        service_type, 
+        limit=args.limit,
+        start_date=start_date_str,
+        end_date=end_date_str
+    )
     if not plans:
         print("❌ No recent plans found for this Service Type.")
         sys.exit(1)

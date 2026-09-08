@@ -170,6 +170,103 @@ class TestPlanningCenterAPI(unittest.TestCase):
         self.assertEqual(recent_plans[1].date, "2026-08-30")
         self.assertEqual(recent_plans[1].title, "")
 
+    @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
+    @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")
+    @patch("data_sources.planning_center.requests.get")
+    def test_fetch_recent_plans_with_target_date(self, mock_get) -> None:
+        """Verifies querying plans around a specific target date."""
+        mock_json_data = {
+            "data": [
+                {
+                    "id": "75661987",
+                    "attributes": {
+                        "dates": "November 17, 2024",
+                        "sort_date": "2024-11-17T10:30:00Z",
+                        "title": None
+                    }
+                }
+            ]
+        }
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_json_data
+        mock_get.return_value = mock_response
+
+        plans = fetch_recent_plans("1053503", target_date="2024-11-17")
+
+        mock_get.assert_called_once()
+        params = mock_get.call_args[1]["params"]
+        self.assertEqual(params["filter"], "before,after")
+        self.assertEqual(params["after"], "2024-11-16T00:00:00Z")
+        self.assertEqual(params["before"], "2024-11-18T23:59:59Z")
+        self.assertEqual(params["per_page"], 100)
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0].id, "75661987")
+        self.assertEqual(plans[0].date, "2024-11-17")
+
+    @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
+    @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")
+    @patch("data_sources.planning_center.requests.get")
+    def test_fetch_recent_plans_with_date_range(self, mock_get) -> None:
+        """Verifies querying plans within a date range."""
+        mock_json_data = {
+            "data": [
+                {
+                    "id": "75661989",
+                    "attributes": {
+                        "dates": "November 24, 2024",
+                        "sort_date": "2024-11-24T10:30:00Z",
+                        "title": "Thanksgiving Service"
+                    }
+                }
+            ]
+        }
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_json_data
+        mock_get.return_value = mock_response
+
+        plans = fetch_recent_plans("1053503", start_date="2024-11-01", end_date="2024-11-30")
+
+        mock_get.assert_called_once()
+        params = mock_get.call_args[1]["params"]
+        self.assertEqual(params["filter"], "before,after")
+        self.assertEqual(params["after"], "2024-10-31T00:00:00Z")
+        self.assertEqual(params["before"], "2024-12-01T23:59:59Z")
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0].title, "Thanksgiving Service")
+
+    @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
+    @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")
+    @patch("data_sources.planning_center.requests.get")
+    def test_fetch_recent_plans_filtered_query_fallback(self, mock_get) -> None:
+        """Verifies fallback to 'past' query if date-filtered query fails."""
+        fail_response = MagicMock()
+        fail_response.raise_for_status.side_effect = requests.exceptions.HTTPError("400 Bad Request")
+
+        success_response = MagicMock()
+        success_response.json.return_value = {
+            "data": [
+                {
+                    "id": "75661987",
+                    "attributes": {
+                        "dates": "November 17, 2024",
+                        "sort_date": "2024-11-17T10:30:00Z",
+                        "title": None
+                    }
+                }
+            ]
+        }
+
+        mock_get.side_effect = [fail_response, success_response]
+
+        plans = fetch_recent_plans("1053503", target_date="2024-11-17")
+
+        self.assertEqual(mock_get.call_count, 2)
+        # Second call should be fallback with filter='past'
+        fallback_params = mock_get.call_args[1]["params"]
+        self.assertEqual(fallback_params["filter"], "past")
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0].id, "75661987")
+
     def test_parse_pco_plan_date(self) -> None:
         """Verifies parsing of various Planning Center date string formats."""
         self.assertEqual(parse_pco_plan_date("September 6, 2026"), "2026-09-06")
