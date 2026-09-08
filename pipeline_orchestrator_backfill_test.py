@@ -43,7 +43,7 @@ class TestPipelineOrchestratorBackfill(unittest.TestCase):
         mock_args.service_type = None
         mock_args.start_date = None
         mock_args.end_date = None
-        mock_args.limit = 50
+        mock_args.limit = 100
         mock_parse_args.return_value = mock_args
         
         mock_prompt_st.return_value = "123"
@@ -78,7 +78,7 @@ class TestPipelineOrchestratorBackfill(unittest.TestCase):
         
         mock_prompt_st.assert_called_once()
         mock_prompt_dates.assert_called_once()
-        mock_fetch_recent.assert_called_once_with("123", limit=50)
+        mock_fetch_recent.assert_called_once_with("123", limit=100)
         
         # Called for Sept 6 and Sept 13
         self.assertEqual(mock_discover.call_count, 2)
@@ -115,6 +115,15 @@ class TestPipelineOrchestratorBackfill(unittest.TestCase):
 
         mock_fetch_recent.assert_called_once()
         mock_discover.assert_called_once()
+
+    def test_argument_parser_default_limit(self):
+        with patch.object(sys, 'argv', ['pipeline_orchestrator_backfill.py']):
+            with patch('pipeline_orchestrator_backfill.prompt_for_service_type', return_value="123"):
+                with patch('pipeline_orchestrator_backfill.prompt_for_dates', return_value=("2026-09-01", "2026-09-30")):
+                    with patch('pipeline_orchestrator_backfill.fetch_recent_plans', return_value=[]) as mock_fetch:
+                        with self.assertRaises(SystemExit):
+                            pipeline_orchestrator_backfill.main()
+                        mock_fetch.assert_called_once_with("123", limit=100)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

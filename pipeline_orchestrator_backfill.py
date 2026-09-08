@@ -55,8 +55,8 @@ def main() -> None:
     parser.add_argument(
         "--limit",
         type=int,
-        default=50,
-        help="Maximum number of historical plans to fetch from PCO before filtering (Default: 50)."
+        default=100,
+        help="Maximum number of historical plans to fetch from PCO before filtering (Default: 100)."
     )
     
     args = parser.parse_args()
