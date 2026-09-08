@@ -542,6 +542,56 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.move_songs')
     @patch('pipeline_orchestrator.make_videos')
     @patch('pipeline_orchestrator.input')
+    def test_main_pipeline_multiple_recordings_skips_existing_and_processes_missing(self, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st):
+        """When first recording destination exists, it skips it and proceeds to process subsequent missing recordings."""
+        mock_input.return_value = "y"
+        mock_prompt_st.return_value = "123"
+        mock_prompt_plan.return_value = ("456", "2026-09-06")
+        mock_fetch_plan.return_value = MagicMock()
+        mock_discover.return_value = ["/path/to/R_20260906-103109.wav", "/path/to/R_20260906-114500.wav"]
+        mock_segment.side_effect = [FileExistsError("Output directory already exists"), None]
+
+        pipeline_orchestrator.main([])
+
+        # Both files should have been attempted
+        self.assertEqual(mock_segment.call_count, 2)
+        # Since the second file was segmented, post-processing should continue
+        mock_copy_songs.assert_called_once()
+
+    @patch('pipeline_orchestrator.prompt_for_service_type')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    @patch('pipeline_orchestrator.discover_raw_audio')
+    @patch('pipeline_orchestrator.segment_service_audio')
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    def test_main_pipeline_multiple_recordings_all_existing_skips_post_processing(self, mock_make_videos, mock_move_songs, mock_copy_songs, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st):
+        """When all recordings destination folders exist, it checks all files and skips post-processing."""
+        mock_prompt_st.return_value = "123"
+        mock_prompt_plan.return_value = ("456", "2026-09-06")
+        mock_fetch_plan.return_value = MagicMock()
+        mock_discover.return_value = ["/path/to/R_20260906-103109.wav", "/path/to/R_20260906-114500.wav"]
+        mock_segment.side_effect = [FileExistsError("Exists 1"), FileExistsError("Exists 2")]
+
+        pipeline_orchestrator.main([])
+
+        # Both files should have been checked
+        self.assertEqual(mock_segment.call_count, 2)
+        # No files were segmented, so post-processing is safely skipped
+        mock_copy_songs.assert_not_called()
+        mock_move_songs.assert_not_called()
+        mock_make_videos.assert_not_called()
+
+    @patch('pipeline_orchestrator.prompt_for_service_type')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    @patch('pipeline_orchestrator.discover_raw_audio')
+    @patch('pipeline_orchestrator.segment_service_audio')
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    @patch('pipeline_orchestrator.input')
     def test_main_pipeline_default_zero_args_scopes_staging_to_target_date(self, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st):
         """Interactive Sunday run locks a single target date and passes that target_date to copy_songs."""
         mock_input.return_value = "y"

@@ -426,6 +426,9 @@ def main(cli_args: Optional[List[str]] = None) -> None:
                 else:
                     target_plans = [prompt_res]
                 
+            total_segmented_count = 0
+            total_skipped_count = 0
+
             for current_plan_id, current_date in target_plans:
                 print(f"\n✅ Target Date locked: {current_date}")
                 print("=" * 50)
@@ -472,14 +475,21 @@ def main(cli_args: Optional[List[str]] = None) -> None:
                     print(f"\n🎧 Processing: {os.path.basename(audio_path)}")
                     try:
                         segment_service_audio(plan)
+                        total_segmented_count += 1
                     except FileExistsError as fe:
                         print(f"\n⚠️ Skipping Audio Segmentation for {os.path.basename(audio_path)}: {fe}")
                         print("To re-run, delete or move the existing destination folder.")
-                        if len(target_plans) == 1:
-                            print("Exiting pipeline to avoid accidentally publishing verified songs.")
-                            return
-                        else:
-                            continue
+                        total_skipped_count += 1
+                        continue
+
+            if total_segmented_count == 0 and total_skipped_count > 0:
+                if has_post_processing_flags:
+                    print("Exiting pipeline to avoid accidentally publishing verified songs.")
+                else:
+                    print("\nAll matching recordings have already been processed.")
+                return
+            elif total_segmented_count > 0 and total_skipped_count > 0:
+                print(f"\n✅ Finished segmenting recordings: {total_segmented_count} processed, {total_skipped_count} skipped (destination already exists).")
         
         # Initialize post-processing date filters from CLI args or locked target_date
         post_proc_target_date = target_plans[0][1] if (run_main_pipeline and len(target_plans) == 1) else args.date
