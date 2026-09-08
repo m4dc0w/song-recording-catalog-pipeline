@@ -47,8 +47,9 @@ Before running the script, ensure you have the following installed on your machi
    cp .env.example .env
    ```
    Open the `.env` file and configure your API keys and folder structures:
-   - `GEMINI_API_KEY`, `PCO_APP_ID`, `PCO_SECRET`, `PCO_SERVICE_TYPE_ID`
-   - Define your strict local/cloud drive folder paths: `RAW_AUDIO_DIR`, `PROCESSED_AUDIO_DIR`, `VERIFIED_AUDIO_DIR`, `VIDEOS_DIR`.
+   - `GEMINI_API_KEY`, `PCO_APP_ID`, `PCO_SECRET`
+   - `PCO_SERVICE_TYPE_ID` *(Optional: If left blank, the CLI will prompt you to select a service type dynamically).*
+   - Define your strict local/cloud drive folder paths: `RAW_AUDIO_DIR`, `PROCESSED_AUDIO_DIR`, `STAGING_AUDIO_DIR`, `VERIFIED_AUDIO_DIR`, `VIDEOS_DIR`.
 
 ---
 
@@ -58,14 +59,14 @@ The entire tool is orchestrated via a single command-line interface: `pipeline_o
 
 ### 1. The Core Segmentation Pipeline
 
-To process a new service recording, simply run the orchestrator without any flags. It will provide an interactive menu of your most recent Planning Center services:
+To process a new service recording, simply run the orchestrator without any flags. It will provide an interactive menu of your service types (if not configured in `.env`) and recent Planning Center services:
 
 ```bash
 python3 pipeline_orchestrator.py
 ```
 
 * **What it does:** 
-  1. Prompts you to select a recent service.
+  1. Prompts you to select a service type and recent service.
   2. Fetches the setlist from PCO.
   3. Automatically discovers the matching raw audio file in `RAW_AUDIO_DIR`.
   4. Generates a compressed MP3 preview for the Gemini AI.
@@ -75,7 +76,7 @@ python3 pipeline_orchestrator.py
 *Optional Overrides:*
 You can bypass the interactive menu for automation:
 ```bash
-python3 pipeline_orchestrator.py --plan-id "123456" --date "2026-09-06"
+python3 pipeline_orchestrator.py --service-type "987654" --plan-id "123456" --date "2026-09-06"
 python3 pipeline_orchestrator.py --audio-file "R_20260906-103109.wav"
 ```
 
@@ -84,13 +85,13 @@ python3 pipeline_orchestrator.py --audio-file "R_20260906-103109.wav"
 After the AI segments the audio, you may want to manually listen to the tracks. Once you are satisfied, you can run the orchestrator in **Post-Processing Mode** to prepare them for publication.
 
 **Publish Verified Songs:**
-Strips the AI numbering prefix (e.g., `Song_01_`) and safely copies the files to your `VERIFIED_AUDIO_DIR` without overwriting existing files.
+Strips the AI numbering prefix (e.g., `Song_01_`) and safely copies the files to a staging area (`STAGING_AUDIO_DIR`). The script will then interactively prompt you to confirm if they have been manually verified. If you type 'y', it securely moves them into your `VERIFIED_AUDIO_DIR` without overwriting existing files.
 ```bash
 python3 pipeline_orchestrator.py --publish-verified
 ```
 
 **Generate Videos:**
-Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and generates OLED-safe, multiline text `.mp4` videos with your `background.png`. It uses a 2-pass FFmpeg `loudnorm` filter (I=-14, TP=-1) to guarantee perfect normalization for YouTube/Social Media.
+Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and generates OLED-safe, multiline text `.mp4` videos using a default `assets/images/background.png`. It uses a 2-pass FFmpeg `loudnorm` filter (I=-14, TP=-1) to guarantee perfect normalization for YouTube/Social Media.
 ```bash
 python3 pipeline_orchestrator.py --make-videos
 ```
@@ -100,14 +101,15 @@ python3 pipeline_orchestrator.py --make-videos
 python3 pipeline_orchestrator.py --publish-verified --make-videos
 ```
 
-*(Note: Ensure a `background.png` file exists in the root directory for video generation to work.)*
+*(Note: Ensure an image exists at `assets/images/background.png` or specify a custom path in the code for video generation to work.)*
 
 ---
 
 ## 🧪 Testing
 
-The project includes a robust unit testing suite covering timestamp math, string sanitization, hallucination prevention logic, FileExistsError safety stops, and dynamic FFmpeg command construction.
+The project includes a robust unit testing suite (24+ tests) covering API interactions, timestamp math, string sanitization, hallucination prevention logic, file operations, and dynamic FFmpeg command construction.
 
+To run the entire test suite across the repository, use the included test runner:
 ```bash
-python3 -m unittest audio_segmentation/audio_segmentation_test.py -v
+python3 run_tests.py
 ```
