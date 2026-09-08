@@ -73,11 +73,19 @@ python3 pipeline_orchestrator.py
   5. The AI rigorously analyzes the audio to find timestamps.
   6. Slices the audio into individual tracks inside a safely isolated output folder within `PROCESSED_AUDIO_DIR`.
 
-*Optional Overrides:*
-You can bypass the interactive menu for automation:
+*(Note: While the base command focuses purely on generating the initial audio cuts, the orchestrator also natively handles the final publishing and video generation! See Section 2 for isolated post-processing, or chain the flags below.)*
+
+*Automation & End-to-End Overrides:*
+You can bypass the interactive menu for headless automation, and even chain the post-processing flags to run the entire end-to-end lifecycle (Segmentation ➔ Publishing ➔ Video Generation) in a single command:
 ```bash
+# Run segmentation only for a specific plan
 python3 pipeline_orchestrator.py --service-type "987654" --plan-id "123456" --date "2026-09-06"
+
+# Run segmentation for a specific audio file
 python3 pipeline_orchestrator.py --audio-file "R_20260906-103109.wav"
+
+# Run the FULL end-to-end pipeline (Segment, Publish, and Generate Videos)
+python3 pipeline_orchestrator.py --audio-file "R_20260906-103109.wav" --publish-verified --make-videos
 ```
 
 ### 2. Post-Processing: Publishing & Video Generation
