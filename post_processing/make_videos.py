@@ -3,6 +3,7 @@ import subprocess
 import json
 import shutil
 import tempfile
+import textwrap
 import wave
 
 def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "assets/images/background.png", ffmpeg_path: str = "ffmpeg") -> None:
@@ -44,8 +45,10 @@ def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "assets/images
         print("=" * 53)
 
         # We need a temp text file for FFmpeg to draw the text, avoiding escaping nightmares
-        # Replace " - " with a newline character (\n) for multiline rendering
-        multiline_title = song_title.replace(" - ", "\n")
+        # Replace " - " with newlines and auto-wrap long text lines to avoid clipping
+        title_parts = song_title.split(" - ")
+        wrapped_parts = [textwrap.fill(part.strip(), width=32) for part in title_parts if part.strip()]
+        multiline_title = "\n".join(wrapped_parts)
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as temp_txt:
             temp_txt.write(multiline_title)
             temp_txt_path = temp_txt.name
@@ -101,7 +104,7 @@ def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "assets/images
                 ffmpeg_path, "-y", "-hide_banner", "-loop", "1", "-framerate", "30",
                 "-i", bg_image_path,
                 "-i", full_audio_path,
-                "-vf", f"drawtext=textfile={temp_txt_path}:line_spacing=20:fontcolor=white@0.8:fontsize=96:shadowcolor=black@0.7:shadowx=4:shadowy=4:x=(w-text_w)/2:y=(h-text_h)/2",
+                "-vf", f"drawtext=textfile={temp_txt_path}:line_spacing=16:fontcolor=white@0.85:fontsize=48:shadowcolor=black@0.7:shadowx=3:shadowy=3:x=(w-text_w)/2:y=(h-text_h)/2",
                 "-af", f"{loudnorm_filter},{fade_filter}",
                 "-c:v", "libx264", "-tune", "stillimage",
                 "-c:a", "aac", "-b:a", "320k",

@@ -38,7 +38,40 @@ class TestMakeVideos(unittest.TestCase):
         
         self.assertEqual(mock_subprocess.call_count, 2)
         pass2_call = mock_subprocess.call_args_list[1][0][0]
-        self.assertIn("Test - Song.wav", " ".join(pass2_call))
+        pass2_cmd_str = " ".join(pass2_call)
+        self.assertIn("Test - Song.wav", pass2_cmd_str)
+        self.assertIn("fontsize=48", pass2_cmd_str)
+
+    @patch('subprocess.run')
+    def test_make_videos_wraps_long_titles(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stderr = 'some log text { "input_i": "-20.0", "input_tp": "-2.0", "input_lra": "5.0", "input_thresh": "-30.0", "target_offset": "0.5" } end log'
+        mock_subprocess.return_value = mock_result
+        
+        long_name = "01 - All Hail King Jesus (Live at Passion 2020 Acoustic Session).wav"
+        self.create_dummy_wav(os.path.join(self.src_dir, long_name))
+        
+        # Capture text written to temporary text files
+        written_texts = []
+        original_tempfile = tempfile.NamedTemporaryFile
+        def mock_named_tempfile(*args, **kwargs):
+            tf = original_tempfile(*args, **kwargs)
+            orig_write = tf.write
+            def capturing_write(data):
+                written_texts.append(data)
+                return orig_write(data)
+            tf.write = capturing_write
+            return tf
+
+        with patch('post_processing.make_videos.tempfile.NamedTemporaryFile', side_effect=mock_named_tempfile):
+            make_videos(self.src_dir, self.dest_dir, bg_image_path=self.bg_image, ffmpeg_path="ffmpeg")
+
+        self.assertTrue(len(written_texts) > 0)
+        # Check that the long subtitle was wrapped across multiple lines
+        self.assertIn("\n", written_texts[0])
+        # Check that individual lines do not exceed the wrapping width
+        for line in written_texts[0].split("\n"):
+            self.assertLessEqual(len(line), 35)
 
     def test_make_videos_skips_existing(self):
         self.create_dummy_wav(os.path.join(self.src_dir, "ExistingSong.wav"))
