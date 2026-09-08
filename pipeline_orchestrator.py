@@ -215,6 +215,8 @@ def main(cli_args=None) -> None:
                 except FileExistsError as fe:
                     print(f"\n⚠️ Skipping Audio Segmentation for {os.path.basename(audio_path)}: {fe}")
                     print("To re-run, delete or move the existing destination folder.")
+                    print("Exiting pipeline to avoid accidentally publishing verified songs.")
+                    return
         
         # 5. Post-Processing: Publish Verified Songs
         if args.publish_verified:
@@ -233,6 +235,8 @@ def main(cli_args=None) -> None:
                 move_songs(STAGING_AUDIO_DIR, VERIFIED_AUDIO_DIR)
             else:
                 print("\n⏸️ Skipping move to verified directory. They remain in staging.")
+                print("Exiting pipeline to allow audio verification before generating videos.")
+                return
             
             
         # 6. Post-Processing: Generate Videos

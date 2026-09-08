@@ -125,6 +125,22 @@ class TestPipelineOrchestrator(unittest.TestCase):
         mock_move_songs.assert_called_once()
         mock_make_videos.assert_called_once()
 
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    @patch('pipeline_orchestrator.input')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    def test_main_post_processing_declined_verification(self, mock_prompt_plan, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs):
+        """When the user does not enter 'y' to verify songs, move_songs and make_videos must not be executed."""
+        mock_input.return_value = "n"
+        
+        pipeline_orchestrator.main(["--service-type", "123", "--publish-verified", "--make-videos"])
+        
+        mock_prompt_plan.assert_not_called()
+        mock_copy_songs.assert_called_once()
+        mock_move_songs.assert_not_called()
+        mock_make_videos.assert_not_called()
+
     @patch('pipeline_orchestrator.fetch_service_plan')
     @patch('pipeline_orchestrator.discover_raw_audio')
     @patch('pipeline_orchestrator.segment_service_audio')
@@ -148,6 +164,29 @@ class TestPipelineOrchestrator(unittest.TestCase):
 
         mock_discover.assert_called_once()
         mock_segment.assert_not_called()
+
+    @patch('pipeline_orchestrator.prompt_for_service_type')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    @patch('pipeline_orchestrator.discover_raw_audio')
+    @patch('pipeline_orchestrator.segment_service_audio')
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    def test_main_pipeline_file_exists_error_exits_before_post_processing(self, mock_make_videos, mock_move_songs, mock_copy_songs, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st):
+        """When segmentation raises FileExistsError, pipeline exits early to avoid publishing verified songs."""
+        mock_prompt_st.return_value = "123"
+        mock_prompt_plan.return_value = ("456", "2026-09-06")
+        mock_fetch_plan.return_value = MagicMock()
+        mock_discover.return_value = ["/path/to/R_20260906-103109.wav"]
+        mock_segment.side_effect = FileExistsError("Output directory already exists")
+
+        pipeline_orchestrator.main([])
+
+        mock_segment.assert_called_once()
+        mock_copy_songs.assert_not_called()
+        mock_move_songs.assert_not_called()
+        mock_make_videos.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
