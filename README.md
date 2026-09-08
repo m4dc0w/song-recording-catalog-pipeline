@@ -120,7 +120,7 @@ python3 pipeline_orchestrator_backfill.py
 
 * **What it does:** 
   1. Interactively prompts you for a `Start Date` and `End Date` (YYYY-MM-DD).
-  2. Fetches up to 50 recent plans from Planning Center and filters them down to your specified timeframe.
+  2. Fetches up to 100 recent plans from Planning Center and filters them down to your specified timeframe.
   3. Automatically searches your `RAW_AUDIO_DIR` for matching `.wav` files.
   4. Sequentially executes the Gemini AI segmentation on every matched date, wrapped in a fault-tolerant `try/except` loop so a single failure doesn't halt the entire batch.
   5. Respects API rate limits automatically by pausing between plans.
