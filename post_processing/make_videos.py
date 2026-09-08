@@ -149,7 +149,7 @@ def make_videos(
                 ffmpeg_path, "-y", "-hide_banner", "-loop", "1", "-framerate", "30",
                 "-i", bg_image_path,
                 "-i", full_audio_path,
-                "-vf", f"drawtext=textfile={temp_txt_path}:line_spacing=16:fontcolor=white@0.85:fontsize=48:shadowcolor=black@0.7:shadowx=3:shadowy=3:x=(w-text_w)/2:y=(h-text_h)/2",
+                "-vf", f"drawtext=textfile={temp_txt_path}:line_spacing=16:fontcolor=white@0.8:fontsize=48:shadowcolor=black@0.7:shadowx=3:shadowy=3:x=(w-text_w)/2:y=(h-text_h)/2",
                 "-af", f"{loudnorm_filter},{fade_filter}",
                 "-c:v", "libx264", "-tune", "stillimage",
                 "-c:a", "aac", "-b:a", "320k",
