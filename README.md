@@ -128,7 +128,12 @@ python3 pipeline_orchestrator_backfill.py
 
 *Optional Overrides:*
 ```bash
-python3 pipeline_orchestrator_backfill.py --start-date "2026-01-01" --end-date "2026-12-31" --limit 100
+python3 pipeline_orchestrator_backfill.py --start-date "2026-01-01" --end-date "2026-12-31" --limit 200
+```
+
+*Logging Output & Errors to a File:*
+```bash
+python3 -u pipeline_orchestrator_backfill.py 2>&1 | tee tmp/backfill_report.txt
 ```
 
 * **Next Steps After Backfill:**
