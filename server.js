@@ -2,6 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import * as dotenv from 'dotenv';
 
@@ -12,20 +13,44 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 
 const PORT = 3000;
 
+function getGitBlobSha(filePath, size) {
+  try {
+    const hash = crypto.createHash('sha1');
+    hash.update(`blob ${size}\0`);
+    const fd = fs.openSync(filePath, 'r');
+    const buffer = Buffer.alloc(65536);
+    let bytesRead;
+    while ((bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null)) > 0) {
+      hash.update(buffer.subarray(0, bytesRead));
+    }
+    fs.closeSync(fd);
+    return hash.digest('hex');
+  } catch {
+    return null;
+  }
+}
+
 function getFileList(dir, base = '') {
   const results = [];
   try {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name.startsWith('.')) {
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '__pycache__' || entry.name.startsWith('.')) {
         if (entry.name !== '.env.example' && entry.name !== '.gitignore') continue;
       }
       const relative = path.join(base, entry.name);
+      const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         results.push({ name: relative, type: 'directory' });
-        results.push(...getFileList(path.join(dir, entry.name), relative));
+        results.push(...getFileList(fullPath, relative));
       } else {
-        results.push({ name: relative, type: 'file' });
+        try {
+          const stat = fs.statSync(fullPath);
+          const sha = getGitBlobSha(fullPath, stat.size);
+          results.push({ name: relative, type: 'file', size: stat.size, sha });
+        } catch {
+          results.push({ name: relative, type: 'file' });
+        }
       }
     }
   } catch (err) {
@@ -35,12 +60,15 @@ function getFileList(dir, base = '') {
 }
 
 function fetchRemote(filePath, branch, res) {
-  const repoUrl = `https://raw.githubusercontent.com/m4dc0w/song-recording-catalog-pipeline/${branch}/${filePath}`;
-  const options = {};
+  const repo = process.env.GITHUB_REPOSITORY || 'm4dc0w/song-recording-catalog-pipeline';
+  const repoUrl = `https://raw.githubusercontent.com/${repo}/${branch}/${filePath}`;
+  const options = {
+    headers: {
+      'User-Agent': 'Node-Server'
+    }
+  };
   if (process.env.GITHUB_PAT) {
-    options.headers = {
-      'Authorization': `token ${process.env.GITHUB_PAT}`
-    };
+    options.headers['Authorization'] = `token ${process.env.GITHUB_PAT}`;
   }
   https.get(repoUrl, options, (githubRes) => {
     if (githubRes.statusCode === 404 && branch === 'main') {
@@ -56,7 +84,7 @@ function fetchRemote(filePath, branch, res) {
     let data = '';
     githubRes.on('data', chunk => { data += chunk; });
     githubRes.on('end', () => {
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end(data);
     });
   }).on('error', (err) => {
@@ -64,6 +92,241 @@ function fetchRemote(filePath, branch, res) {
     res.end(err.message);
   });
 }
+
+function fetchRemoteFiles(branch, callback) {
+  const repo = process.env.GITHUB_REPOSITORY || 'm4dc0w/song-recording-catalog-pipeline';
+  const apiUrl = `https://api.github.com/repos/${repo}/git/trees/${branch}?recursive=1`;
+  const options = {
+    headers: {
+      'User-Agent': 'Node-Server'
+    }
+  };
+  if (process.env.GITHUB_PAT) {
+    options.headers['Authorization'] = `token ${process.env.GITHUB_PAT}`;
+  }
+  https.get(apiUrl, options, (githubRes) => {
+    if (githubRes.statusCode === 404 && branch === 'main') {
+      // Fallback to master if main doesn't exist
+      fetchRemoteFiles('master', callback);
+      return;
+    }
+    let data = '';
+    githubRes.on('data', chunk => { data += chunk; });
+    githubRes.on('end', () => {
+      try {
+        if (githubRes.statusCode >= 200 && githubRes.statusCode < 300) {
+          const parsed = JSON.parse(data);
+          const files = (parsed.tree || [])
+            .filter(item => item.type === 'blob')
+            .filter(item => {
+              const p = item.path;
+              if (p === '.git' || p.startsWith('.git/') || p.startsWith('node_modules/') || p.includes('__pycache__')) return false;
+              if (p.startsWith('.') && p !== '.env.example' && p !== '.gitignore') return false;
+              return true;
+            })
+            .map(item => ({ name: item.path, type: 'file', size: item.size, sha: item.sha }));
+          callback(null, files);
+        } else {
+          callback(new Error(`GitHub API returned status ${githubRes.statusCode}`));
+        }
+      } catch (e) {
+        callback(e);
+      }
+    });
+  }).on('error', (err) => {
+    callback(err);
+  });
+}
+
+const clientScript = String.raw`
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
+  
+  var targetTab = document.getElementById('tab-' + tabId);
+  if (targetTab) {
+    targetTab.classList.add('active');
+  }
+  
+  var activeBtn = btn;
+  if (!activeBtn && typeof window !== 'undefined' && window.event && window.event.currentTarget && window.event.currentTarget.classList) {
+    activeBtn = window.event.currentTarget;
+  }
+  if (!activeBtn && typeof document !== 'undefined') {
+    activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(function(b) {
+      return b.getAttribute('onclick') && b.getAttribute('onclick').includes(tabId);
+    });
+  }
+  if (activeBtn && activeBtn.classList) {
+    activeBtn.classList.add('active');
+  }
+  
+  if (tabId === 'diffs') {
+    loadDiffs();
+  }
+}
+
+async function loadDiffs(force = false) {
+  const container = document.getElementById('diff-container');
+  const loader = document.getElementById('diff-loading');
+  
+  if (!container || !loader) return;
+
+  // If we already loaded it and not forced, don't reload unless empty
+  if (!force && container.innerHTML.trim() !== '' && !container.innerHTML.includes('No changes')) {
+    return; 
+  }
+  
+  loader.style.display = 'block';
+  container.innerHTML = '';
+
+  try {
+    const [filesRes, remoteFilesRes] = await Promise.all([
+      fetch('/api/files'),
+      fetch('/api/remote-files')
+    ]);
+    const localData = await filesRes.json();
+    const remoteData = remoteFilesRes.ok ? await remoteFilesRes.json() : { files: [] };
+
+    const localFiles = (localData.files || []).filter(f => f.type === 'file');
+    const remoteFiles = (remoteData.files || []).filter(f => f.type === 'file');
+
+    const localFileMap = new Map(localFiles.map(f => [f.name, f]));
+    const remoteFileMap = new Map(remoteFiles.map(f => [f.name, f]));
+
+    // Union of all unique paths across local workspace and remote repository
+    const allPaths = Array.from(new Set([...localFileMap.keys(), ...remoteFileMap.keys()])).sort();
+
+    let unifiedDiffs = '';
+    const stats = { added: 0, modified: 0, deleted: 0, binary: 0 };
+
+    function isBinaryFile(filePath) {
+      const binaryExtensions = [
+        '.wav', '.mp3', '.m4a', '.aac', '.flac', '.ogg', '.wma',
+        '.mp4', '.mov', '.avi', '.mkv', '.webm',
+        '.png', '.jpg', '.jpeg', '.gif', '.ico', '.webp', '.svgz', '.bmp', '.tiff',
+        '.pyc', '.pyo', '.pyd', '.so', '.dll', '.dylib', '.exe',
+        '.zip', '.tar', '.gz', '.tgz', '.bz2', '.7z', '.rar',
+        '.woff', '.woff2', '.ttf', '.eot', '.otf',
+        '.pdf', '.bin', '.dat'
+      ];
+      const lower = filePath.toLowerCase();
+      return binaryExtensions.some(function(ext) { return lower.endsWith(ext); });
+    }
+
+    for (const path of allPaths) {
+      // Skip node_modules and .git internals
+      if (path.startsWith('node_modules/') || path.startsWith('.git/') || path.includes('__pycache__')) continue;
+
+      const hasLocal = localFileMap.has(path);
+      const hasRemote = remoteFileMap.has(path);
+      const localFile = localFileMap.get(path);
+      const remoteFile = remoteFileMap.get(path);
+
+      // Handle binary files without downloading large raw binary streams
+      if (isBinaryFile(path)) {
+        if (hasRemote && !hasLocal) {
+          stats.deleted++;
+          stats.binary++;
+          unifiedDiffs += 'diff --git a/' + path + ' b/' + path + '\ndeleted file mode 100644\nBinary files a/' + path + ' and /dev/null differ\n\n';
+        } else if (hasLocal && !hasRemote) {
+          stats.added++;
+          stats.binary++;
+          unifiedDiffs += 'diff --git a/' + path + ' b/' + path + '\nnew file mode 100644\nBinary files /dev/null and b/' + path + ' differ\n\n';
+        } else {
+          // Both exist: check if modified via Git blob SHA or size
+          const isDifferent = (localFile && remoteFile && localFile.sha && remoteFile.sha)
+            ? (localFile.sha !== remoteFile.sha)
+            : (localFile && remoteFile && typeof localFile.size === 'number' && typeof remoteFile.size === 'number' && localFile.size !== remoteFile.size);
+          if (isDifferent) {
+            stats.modified++;
+            stats.binary++;
+            unifiedDiffs += 'diff --git a/' + path + ' b/' + path + '\nBinary files a/' + path + ' and b/' + path + ' differ\n\n';
+          }
+        }
+        continue;
+      }
+
+      // Fast check: if both exist and Git blob SHA matches, content is 100% identical
+      if (hasLocal && hasRemote && localFile && remoteFile && localFile.sha && remoteFile.sha && localFile.sha === remoteFile.sha) {
+        continue;
+      }
+
+      const [localRes, remoteRes] = await Promise.all([
+        hasLocal ? fetch('/api/local?path=' + encodeURIComponent(path)) : Promise.resolve(null),
+        hasRemote ? fetch('/api/remote?path=' + encodeURIComponent(path)) : Promise.resolve(null)
+      ]);
+
+      const localTextRaw = (localRes && localRes.ok) ? await localRes.text() : '';
+      const remoteTextRaw = (remoteRes && remoteRes.ok) ? await remoteRes.text() : '';
+
+      // Normalize line endings to prevent "all lines changed" issue
+      const localText = localTextRaw.replace(/\r\n/g, '\n');
+      const remoteText = remoteTextRaw.replace(/\r\n/g, '\n');
+
+      if (hasLocal && hasRemote && localText === remoteText) {
+        continue; // No changes detected
+      }
+
+      if (hasRemote && !hasLocal) {
+        // Case 1: DELETED FILE (exists remotely on GitHub, deleted in local workspace)
+        stats.deleted++;
+        const patch = Diff.createPatch(path, remoteText, '');
+        const hunkLines = patch.split('\n').slice(4).join('\n');
+        const gitDiff = 'diff --git a/' + path + ' b/' + path + '\ndeleted file mode 100644\n--- a/' + path + '\n+++ /dev/null\n' + hunkLines + '\n';
+        unifiedDiffs += gitDiff + '\n';
+      } else if (hasLocal && !hasRemote) {
+        // Case 2: ADDED FILE (created in local workspace, missing in remote repository)
+        stats.added++;
+        const patch = Diff.createPatch(path, '', localText);
+        const hunkLines = patch.split('\n').slice(4).join('\n');
+        const gitDiff = 'diff --git a/' + path + ' b/' + path + '\nnew file mode 100644\n--- /dev/null\n+++ b/' + path + '\n' + hunkLines + '\n';
+        unifiedDiffs += gitDiff + '\n';
+      } else {
+        // Case 3: MODIFIED FILE (exists in both, content changed)
+        stats.modified++;
+        const patch = Diff.createPatch(path, remoteText, localText);
+        const hunkLines = patch.split('\n').slice(4).join('\n');
+        const gitDiff = 'diff --git a/' + path + ' b/' + path + '\n--- a/' + path + '\n+++ b/' + path + '\n' + hunkLines + '\n';
+        unifiedDiffs += gitDiff + '\n';
+      }
+    }
+
+    loader.style.display = 'none';
+
+    if (!unifiedDiffs.trim()) {
+      container.innerHTML = '<div class="no-changes">✅ No local changes detected. Your workspace is synced with GitHub.</div>';
+      return;
+    }
+
+    // Summary bar above diffs
+    const badges = [];
+    if (stats.modified > 0) badges.push('<span style="color: #38bdf8;">✎ ' + stats.modified + ' Modified</span>');
+    if (stats.added > 0) badges.push('<span style="color: #4ade80;">✚ ' + stats.added + ' Added</span>');
+    if (stats.deleted > 0) badges.push('<span style="color: #f87171;">✖ ' + stats.deleted + ' Deleted</span>');
+    if (stats.binary > 0) badges.push('<span style="color: #a78bfa;">📦 ' + stats.binary + ' Binary</span>');
+
+    const summaryBar = badges.length > 0 ? '<div style="display: flex; gap: 16px; margin-bottom: 16px; font-size: 14px; font-weight: 600; padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;">' + badges.join('') + '</div>' : '';
+
+    container.innerHTML = summaryBar + '<div id="diff2html-target"></div>';
+
+    // Render the diff using diff2html
+    const diffTarget = document.getElementById('diff2html-target');
+    const diff2htmlUi = new Diff2HtmlUI(diffTarget, unifiedDiffs, {
+      drawFileList: true,
+      matching: 'lines',
+      outputFormat: 'line-by-line',
+      colorScheme: 'dark'
+    });
+    diff2htmlUi.draw();
+    diff2htmlUi.highlightCode();
+
+  } catch (err) {
+    loader.style.display = 'none';
+    container.innerHTML = '<div class="no-changes" style="color: var(--warning)">Failed to load diffs: ' + err.message + '</div>';
+  }
+}
+`;
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -74,10 +337,30 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === '/app.js') {
+    res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+    res.end(clientScript);
+    return;
+  }
+
   if (url.pathname === '/api/files') {
     const files = getFileList(__dirname);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ files }));
+    return;
+  }
+
+  if (url.pathname === '/api/remote-files') {
+    fetchRemoteFiles('main', (err, files) => {
+      if (err) {
+        console.warn('Could not fetch remote files:', err.message);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ files: [], warning: err.message }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ files }));
+    });
     return;
   }
 
@@ -192,7 +475,7 @@ const server = http.createServer((req, res) => {
     /* Diff Styles */
     #diff-container { margin-top: 16px; }
     .d2h-file-header { background-color: var(--card-bg) !important; color: #fff !important; border-color: var(--border) !important; }
-    .d2h-file-wrapper { border-color: var(--border) !important; border-radius: 8px; overflow: hidden; }
+    .d2h-file-wrapper { border-color: var(--border) !important; border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
     .loading { color: var(--accent); font-weight: 600; font-size: 16px; padding: 20px; text-align: center; }
     .no-changes { text-align: center; color: var(--success); font-size: 18px; padding: 40px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; }
     
@@ -203,6 +486,19 @@ const server = http.createServer((req, res) => {
     .d2h-info { background-color: rgba(56, 189, 248, 0.1) !important; color: var(--text-muted) !important; }
     .d2h-emptyplaceholder { background-color: transparent !important; }
     .d2h-code-line-ctn { color: #cbd5e1 !important; }
+    
+    /* Diff2Html badges & file list */
+    .d2h-tag { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; margin-left: 8px; }
+    .d2h-deleted-tag { background-color: rgba(248, 113, 113, 0.25) !important; color: #f87171 !important; border: 1px solid #f87171 !important; }
+    .d2h-added-tag { background-color: rgba(74, 222, 128, 0.25) !important; color: #4ade80 !important; border: 1px solid #4ade80 !important; }
+    .d2h-changed-tag { background-color: rgba(56, 189, 248, 0.25) !important; color: #38bdf8 !important; border: 1px solid #38bdf8 !important; }
+    .d2h-file-list-wrapper { background-color: var(--card-bg) !important; border-color: var(--border) !important; border-radius: 8px; margin-bottom: 20px; }
+    .d2h-file-list-header { color: var(--text) !important; border-bottom-color: var(--border) !important; }
+    .d2h-file-list-line { color: var(--text-muted) !important; }
+    .d2h-file-list-line a { color: var(--accent) !important; }
+    .d2h-file-list-line:hover { background-color: rgba(255, 255, 255, 0.05) !important; }
+    .d2h-lines-added { color: var(--success) !important; }
+    .d2h-lines-deleted { color: #f87171 !important; }
   </style>
 </head>
 <body>
@@ -210,7 +506,7 @@ const server = http.createServer((req, res) => {
     <header>
       <div class="title-group">
         <h1>Code Review & Dashboard</h1>
-        <p>Sync Target: <strong>m4dc0w/song-recording-catalog-pipeline</strong></p>
+        <p>Sync Target: <strong>${process.env.GITHUB_REPOSITORY || 'm4dc0w/song-recording-catalog-pipeline'}</strong></p>
       </div>
     </header>
 
@@ -255,10 +551,15 @@ const server = http.createServer((req, res) => {
 
     <!-- Diff Viewer Tab -->
     <div id="tab-diffs" class="tab-content">
-      <p style="color: var(--text-muted); margin-bottom: 20px;">
-        Comparing local workspace modifications against the remote GitHub repository default branch.
-      </p>
-      <div id="diff-loading" class="loading" style="display: none;">Generating line-by-line diffs...</div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <p style="color: var(--text-muted);">
+          Comparing local workspace modifications against remote GitHub default branch.
+        </p>
+        <button class="tab-btn" style="background: var(--card-bg); border: 1px solid var(--border); font-size: 13px; padding: 6px 14px; color: #fff;" onclick="loadDiffs(true)">
+          ⟳ Refresh Diffs
+        </button>
+      </div>
+      <div id="diff-loading" class="loading" style="display: none;">Scanning local & remote repository files...</div>
       <div id="diff-container"></div>
     </div>
   </div>
@@ -266,105 +567,7 @@ const server = http.createServer((req, res) => {
   <!-- JS Dependencies for Diff -->
   <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
   <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
-
-  <script>
-    function switchTab(tabId) {
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-      
-      document.getElementById('tab-' + tabId).classList.add('active');
-      event.currentTarget.classList.add('active');
-      
-      if (tabId === 'diffs') {
-        loadDiffs();
-      }
-    }
-
-    async function loadDiffs() {
-      const container = document.getElementById('diff-container');
-      const loader = document.getElementById('diff-loading');
-      
-      // If we already loaded it, don't reload unless empty
-      if (container.innerHTML.trim() !== '' && !container.innerHTML.includes('No changes')) {
-        return; 
-      }
-      
-      loader.style.display = 'block';
-      container.innerHTML = '';
-
-      try {
-        const filesRes = await fetch('/api/files');
-        const { files } = await filesRes.json();
-        const fileList = files.filter(f => f.type === 'file');
-
-        let unifiedDiffs = '';
-
-        for (const file of fileList) {
-          const path = file.name;
-          // Skip known binary types
-          if (
-            path.endsWith('.wav') || 
-            path.endsWith('.mp3') || 
-            path.endsWith('.pyc') ||
-            path.endsWith('.png') ||
-            path.endsWith('.jpg') ||
-            path.endsWith('.jpeg') ||
-            path.endsWith('.gif') ||
-            path.endsWith('.ico') ||
-            path.endsWith('.webp') ||
-            path.endsWith('.mp4') ||
-            path.endsWith('.mov')
-          ) continue;
-
-          const [localRes, remoteRes] = await Promise.all([
-            fetch('/api/local?path=' + encodeURIComponent(path)),
-            fetch('/api/remote?path=' + encodeURIComponent(path))
-          ]);
-
-          const localTextRaw = localRes.ok ? await localRes.text() : '';
-          const remoteTextRaw = remoteRes.ok ? await remoteRes.text() : '';
-
-          // Normalize line endings to prevent "all lines changed" issue
-          const localText = localTextRaw.replace(/\\r\\n/g, '\\n');
-          const remoteText = remoteTextRaw.replace(/\\r\\n/g, '\\n');
-
-          if (localText === remoteText) continue; // No changes detected
-
-          // Create unified diff string using jsdiff
-          const patch = Diff.createTwoFilesPatch(
-            path, 
-            path, 
-            remoteText, 
-            localText, 
-            undefined, 
-            undefined
-          );
-          unifiedDiffs += patch + '\\n';
-        }
-
-        loader.style.display = 'none';
-
-        if (!unifiedDiffs.trim()) {
-          container.innerHTML = '<div class="no-changes">✅ No local changes detected. Your workspace is synced with GitHub.</div>';
-          return;
-        }
-
-        // Render the diff using diff2html
-        const diff2htmlUi = new Diff2HtmlUI(container, unifiedDiffs, {
-          drawFileList: true,
-          matching: 'lines',
-          outputFormat: 'line-by-line',
-          colorScheme: 'dark' // If supported by the bundle
-        });
-        diff2htmlUi.draw();
-        diff2htmlUi.highlightCode();
-
-      } catch (err) {
-        loader.style.display = 'none';
-        container.innerHTML = '<div class="no-changes" style="color: var(--warning)">Failed to load diffs: ' + err.message + '</div>';
-      }
-    }
-  </script>
+  <script type="text/javascript" src="/app.js"></script>
 </body>
 </html>`;
 
