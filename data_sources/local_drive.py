@@ -15,7 +15,7 @@ def discover_raw_audio(target_date: str, raw_audio_dir: str) -> List[str]:
     """
     raw_path = Path(raw_audio_dir)
     if not raw_path.exists() or not raw_path.is_dir():
-        return []
+        raise FileNotFoundError(f"Raw audio directory does not exist: '{raw_audio_dir}'")
 
     # Strip hyphens to match the YYYYMMDD format in the filename
     date_str = target_date.replace("-", "")

@@ -91,5 +91,30 @@ class TestPipelineOrchestratorBackfill(unittest.TestCase):
         # Sleep called twice, once for each plan that we attempted to process
         self.assertEqual(mock_sleep.call_count, 2)
 
+    @patch('pipeline_orchestrator_backfill.argparse.ArgumentParser.parse_args')
+    @patch('pipeline_orchestrator_backfill.prompt_for_service_type')
+    @patch('pipeline_orchestrator_backfill.prompt_for_dates')
+    @patch('pipeline_orchestrator_backfill.fetch_recent_plans')
+    @patch('pipeline_orchestrator_backfill.discover_raw_audio')
+    def test_main_backfill_missing_raw_audio_dir(self, mock_discover, mock_fetch_recent, mock_prompt_dates, mock_prompt_st, mock_parse_args):
+        mock_args = MagicMock()
+        mock_args.service_type = "123"
+        mock_args.start_date = "2026-09-01"
+        mock_args.end_date = "2026-09-30"
+        mock_parse_args.return_value = mock_args
+
+        mock_plan = MagicMock()
+        mock_plan.id = "456"
+        mock_plan.dates = "September 6, 2026"
+        mock_plan.title = "Vision Sunday"
+        mock_fetch_recent.return_value = [mock_plan]
+
+        mock_discover.side_effect = FileNotFoundError("Raw audio directory does not exist")
+
+        pipeline_orchestrator_backfill.main()
+
+        mock_fetch_recent.assert_called_once()
+        mock_discover.assert_called_once()
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

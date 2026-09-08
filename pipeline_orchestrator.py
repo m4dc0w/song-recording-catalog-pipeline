@@ -164,18 +164,29 @@ def main() -> None:
             if args.audio_file:
                 raw_audio_path = os.path.join(RAW_AUDIO_DIR, args.audio_file)
                 if not os.path.exists(raw_audio_path):
-                    print(f"❌ Error: Raw audio file not found at {raw_audio_path}")
+                    if not os.path.exists(RAW_AUDIO_DIR):
+                        print(f"❌ Error: RAW_AUDIO_DIR directory does not exist: {RAW_AUDIO_DIR}")
+                        print("Please check your .env file and verify the path (e.g. check for typos in your username or Google Drive mount).")
+                    else:
+                        print(f"❌ Error: Raw audio file '{args.audio_file}' not found in {RAW_AUDIO_DIR}")
                     return
                 raw_audio_files = [raw_audio_path]
             else:
                 print("🔍 Automatically discovering raw audio files for the service date...")
-                discovered_paths = discover_raw_audio(target_date, RAW_AUDIO_DIR)
+                try:
+                    discovered_paths = discover_raw_audio(target_date, RAW_AUDIO_DIR)
+                except FileNotFoundError:
+                    print(f"❌ Error: RAW_AUDIO_DIR directory does not exist: {RAW_AUDIO_DIR}")
+                    print("Please check your .env file and verify the path (e.g. check for typos in your username or Google Drive mount).")
+                    return
+
                 if discovered_paths:
                     print(f"✅ Found {len(discovered_paths)} matching raw audio file(s).")
                     raw_audio_files = discovered_paths
                 else:
-                    print(f"❌ Error: Could not automatically find any raw audio files for {target_date} in {RAW_AUDIO_DIR}.")
-                    print("Please provide one manually using the --audio-file argument.")
+                    print(f"❌ Error: Could not find any raw audio files matching '{target_date}' in {RAW_AUDIO_DIR}.")
+                    print("The directory exists, but contains no .wav files for this date.")
+                    print("Please verify the service date or provide an audio file manually using the --audio-file argument.")
                     return
             
             # 4. Hand off execution to the audio segmentation worker (which auto-discovers/stitches if filepath is empty)

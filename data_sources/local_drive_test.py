@@ -12,10 +12,10 @@ class TestLocalDrive(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_discover_raw_audio_dir_not_exists(self):
-        # Pass a non-existent directory
+        # Pass a non-existent directory and verify FileNotFoundError is raised
         fake_dir = os.path.join(self.raw_audio_dir, "nonexistent")
-        result = discover_raw_audio("2026-09-06", fake_dir)
-        self.assertEqual(result, [])
+        with self.assertRaises(FileNotFoundError):
+            discover_raw_audio("2026-09-06", fake_dir)
 
     def test_discover_raw_audio_no_matches(self):
         # Create some unrelated files

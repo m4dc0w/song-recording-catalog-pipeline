@@ -113,7 +113,15 @@ def main() -> None:
         print(f"\n📆 Processing Plan: {plan_summary.title or 'Untitled'} on {formatted_date}")
         try:
             # 1. Discover raw audio files
-            discovered_paths = discover_raw_audio(formatted_date, RAW_AUDIO_DIR)
+            try:
+                discovered_paths = discover_raw_audio(formatted_date, RAW_AUDIO_DIR)
+            except FileNotFoundError as e:
+                print(f"  ❌ Error: RAW_AUDIO_DIR directory does not exist: {RAW_AUDIO_DIR}")
+                print("  Please check your .env file and verify the path (e.g. check for typos in your username or Google Drive mount).")
+                fail_count += 1
+                failures.append(f"{formatted_date} - {e}")
+                break
+
             if not discovered_paths:
                 raise FileNotFoundError(f"No raw audio files found for {formatted_date} in {RAW_AUDIO_DIR}")
                 

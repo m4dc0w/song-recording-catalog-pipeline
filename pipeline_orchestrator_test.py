@@ -91,5 +91,53 @@ class TestPipelineOrchestrator(unittest.TestCase):
         mock_move_songs.assert_called_once()
         mock_make_videos.assert_called_once()
 
+    @patch('pipeline_orchestrator.argparse.ArgumentParser.parse_args')
+    @patch('pipeline_orchestrator.prompt_for_service_type')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    @patch('pipeline_orchestrator.discover_raw_audio')
+    @patch('pipeline_orchestrator.segment_service_audio')
+    def test_main_pipeline_missing_raw_audio_dir(self, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st, mock_parse_args):
+        mock_args = MagicMock()
+        mock_args.service_type = "123"
+        mock_args.plan_id = "456"
+        mock_args.date = "2026-09-06"
+        mock_args.audio_file = None
+        mock_args.publish_verified = False
+        mock_args.make_videos = False
+        mock_parse_args.return_value = mock_args
+
+        mock_fetch_plan.return_value = MagicMock()
+        mock_discover.side_effect = FileNotFoundError("Raw audio directory does not exist")
+
+        pipeline_orchestrator.main()
+
+        mock_discover.assert_called_once()
+        mock_segment.assert_not_called()
+
+    @patch('pipeline_orchestrator.argparse.ArgumentParser.parse_args')
+    @patch('pipeline_orchestrator.prompt_for_service_type')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    @patch('pipeline_orchestrator.discover_raw_audio')
+    @patch('pipeline_orchestrator.segment_service_audio')
+    def test_main_pipeline_no_matching_audio_files(self, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st, mock_parse_args):
+        mock_args = MagicMock()
+        mock_args.service_type = "123"
+        mock_args.plan_id = "456"
+        mock_args.date = "2026-09-06"
+        mock_args.audio_file = None
+        mock_args.publish_verified = False
+        mock_args.make_videos = False
+        mock_parse_args.return_value = mock_args
+
+        mock_fetch_plan.return_value = MagicMock()
+        mock_discover.return_value = []
+
+        pipeline_orchestrator.main()
+
+        mock_discover.assert_called_once()
+        mock_segment.assert_not_called()
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
