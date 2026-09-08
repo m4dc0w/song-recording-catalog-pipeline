@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import os
 import sys
 import argparse
 from datetime import datetime
+from typing import Tuple, Optional, List
 from dotenv import load_dotenv
 
 from data_sources.planning_center import fetch_service_plan, fetch_recent_plans, fetch_service_types
@@ -51,7 +54,7 @@ def prompt_for_service_type() -> str:
             print("Please enter a valid number.")
 
 
-def prompt_for_staging_dates() -> tuple[str | None, str | None, str | None]:
+def prompt_for_staging_dates() -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """Prompts the user for date filtering options when staging songs.
     
     Returns:
@@ -151,7 +154,7 @@ def prompt_for_plan(service_type_id: str) -> tuple[str, str]:
             print("Please enter a valid number.")
 
 
-def main(cli_args=None) -> None:
+def main(cli_args: Optional[List[str]] = None) -> None:
     """Executes the master pipeline orchestration loop."""
     parser = argparse.ArgumentParser(description="Song Recording Catalog Pipeline Orchestrator.")
     

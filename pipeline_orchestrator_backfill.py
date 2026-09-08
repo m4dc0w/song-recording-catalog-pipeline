@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import os
 import sys
 import argparse
 import time
 from datetime import datetime
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 
 from data_sources.planning_center import fetch_recent_plans, fetch_service_plan
 from data_sources.local_drive import discover_raw_audio
@@ -47,7 +49,7 @@ def parse_pco_date(pco_date_str: str) -> Optional[datetime]:
     except ValueError:
         return None
 
-def main(cli_args: list[str] | None = None) -> None:
+def main(cli_args: Optional[List[str]] = None) -> None:
     """Executes the backfill pipeline orchestration loop."""
     parser = argparse.ArgumentParser(description="Song Recording Catalog Pipeline - Backfill Orchestrator.")
     
