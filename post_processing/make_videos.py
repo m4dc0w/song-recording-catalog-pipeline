@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import wave
 
-def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "background.png", ffmpeg_path: str = "ffmpeg") -> None:
+def make_videos(src_dir: str, dest_dir: str, bg_image_path: str = "assets/images/background.png", ffmpeg_path: str = "ffmpeg") -> None:
     """
     Generates video files for each .wav file in the source directory using a two-pass
     loudnorm audio normalization and an image background overlay.
