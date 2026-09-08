@@ -1,5 +1,4 @@
-import os
-import glob
+from pathlib import Path
 from typing import List
 
 def discover_raw_audio(target_date: str, raw_audio_dir: str) -> List[str]:
@@ -14,20 +13,20 @@ def discover_raw_audio(target_date: str, raw_audio_dir: str) -> List[str]:
     Returns:
         List[str]: A list of absolute paths to the matching raw audio files, or empty list if not found.
     """
-    if not os.path.exists(raw_audio_dir):
+    raw_path = Path(raw_audio_dir)
+    if not raw_path.exists() or not raw_path.is_dir():
         return []
 
     # Strip hyphens to match the YYYYMMDD format in the filename
     date_str = target_date.replace("-", "")
     
-    # Look for any .wav file containing this date string
-    pattern = os.path.join(raw_audio_dir, f"*{date_str}*.wav")
-    matching_files = glob.glob(pattern)
+    # Iterate directory entries directly without globbing on the parent path,
+    # ensuring directory names with square brackets like '[Raw]' are treated literally.
+    matching_files = [
+        str(p) for p in raw_path.iterdir()
+        if p.is_file() and date_str in p.name and p.suffix.lower() == ".wav"
+    ]
     
-    if not matching_files:
-        return []
-        
-    # Sort files to ensure deterministic behavior if multiple files exist for the same day
     matching_files.sort()
-    
     return matching_files
+
