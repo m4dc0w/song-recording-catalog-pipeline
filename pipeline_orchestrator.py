@@ -92,7 +92,7 @@ def prompt_for_plan(service_type_id: str) -> tuple[str, str]:
             print("Please enter a valid number.")
 
 
-def main() -> None:
+def main(cli_args=None) -> None:
     """Executes the master pipeline orchestration loop."""
     parser = argparse.ArgumentParser(description="Song Recording Catalog Pipeline Orchestrator.")
     
@@ -125,14 +125,31 @@ def main() -> None:
         action="store_true",
         help="Run post-processing to generate MP4 videos from the verified audio recordings."
     )
+    parser.add_argument(
+        "--skip-post-processing",
+        action="store_true",
+        help="Skip post-processing (publishing and video generation) when running the interactive pipeline."
+    )
     
-    args = parser.parse_args()
+    if cli_args is not None:
+        args = parser.parse_args(cli_args)
+        args_len = len(cli_args)
+    else:
+        args = parser.parse_args()
+        args_len = len(sys.argv) - 1
+
+    # If no CLI arguments were passed (args length is zero), default to running the full
+    # end-to-end pipeline including post-processing (staging, moving to verified, and video generation).
+    if args_len == 0:
+        args.publish_verified = True
+        args.make_videos = True
+        run_main_pipeline = True
+    else:
+        # We only prompt for service type / run the main pipeline if not in standalone post-processing mode
+        run_main_pipeline = not (args.publish_verified or args.make_videos) or args.plan_id or args.date or args.audio_file
 
     # Determine Service Type (CLI -> .env -> Interactive Menu)
     service_type = args.service_type
-    
-    # We only prompt for service type if we are actually running the main pipeline
-    run_main_pipeline = not (args.publish_verified or args.make_videos) or args.plan_id or args.date or args.audio_file
     
     if run_main_pipeline and not service_type:
         print("\n🔍 No Service Type ID provided in .env or arguments. Let's find it...")

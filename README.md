@@ -57,34 +57,33 @@ Before running the script, ensure you have the following installed on your machi
 
 The entire tool is orchestrated via a single command-line interface: `pipeline_orchestrator.py`.
 
-### 1. The Core Segmentation Pipeline
+### 1. The Full End-to-End Pipeline (Default)
 
-To process a new service recording, simply run the orchestrator without any flags. It will provide an interactive menu of your service types (if not configured in `.env`) and recent Planning Center services:
+To process a new service recording, simply run the orchestrator without any flags. When invoked with zero arguments, the orchestrator defaults to running the **entire end-to-end workflow**:
 
 ```bash
 python3 pipeline_orchestrator.py
 ```
 
-* **What it does:** 
-  1. Prompts you to select a service type and recent service.
+* **What it does automatically:** 
+  1. Prompts you to select a service type and recent service from Planning Center.
   2. Fetches the setlist from PCO.
   3. Automatically discovers the matching raw audio file in `RAW_AUDIO_DIR`.
-  4. Generates a compressed MP3 preview for the Gemini AI.
-  5. The AI rigorously analyzes the audio to find timestamps.
-  6. Slices the audio into individual tracks inside a safely isolated output folder within `PROCESSED_AUDIO_DIR`.
+  4. Generates an MP3 preview and uses Gemini AI to determine precise song timestamps.
+  5. Slices the audio into individual tracks inside `PROCESSED_AUDIO_DIR`.
+  6. **Post-Processing (Publish Verified):** Stages the songs into `STAGING_AUDIO_DIR` and interactively prompts you to confirm moving them to `VERIFIED_AUDIO_DIR`.
+  7. **Post-Processing (Generate Videos):** Renders OLED-safe, loudness-normalized MP4 videos into `VIDEOS_DIR`.
 
-*(Note: While the base command focuses purely on generating the initial audio cuts, the orchestrator also natively handles the final publishing and video generation! See Section 2 for isolated post-processing, or chain the flags below.)*
-
-*Automation & End-to-End Overrides:*
-You can bypass the interactive menu for headless automation, and even chain the post-processing flags to run the entire end-to-end lifecycle (Segmentation ➔ Publishing ➔ Video Generation) in a single command:
+*Fine-Grained Controls & Overrides:*
+You can bypass the interactive menu for headless automation, skip post-processing, or isolate specific stages:
 ```bash
-# Run segmentation only for a specific plan
+# Run segmentation only (skips post-processing)
 python3 pipeline_orchestrator.py --service-type "987654" --plan-id "123456" --date "2026-09-06"
 
-# Run segmentation for a specific audio file
-python3 pipeline_orchestrator.py --audio-file "R_20260906-103109.wav"
+# Run interactive segmentation only without post-processing
+python3 pipeline_orchestrator.py --skip-post-processing
 
-# Run the FULL end-to-end pipeline (Segment, Publish, and Generate Videos)
+# Run segmentation for a specific audio file (with explicit post-processing)
 python3 pipeline_orchestrator.py --audio-file "R_20260906-103109.wav" --publish-verified --make-videos
 ```
 
