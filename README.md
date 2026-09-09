@@ -59,6 +59,8 @@ flowchart TD
         Verified[("Verified Archive<br/>VERIFIED_AUDIO_DIR<br/>Title - Date.wav")]
         MakeVideo["Video Generator (make_videos.py)<br/>• 2-Pass FFmpeg loudnorm (-14 LUFS)<br/>• OLED-safe multiline typography"]
         Videos[("Video Archive<br/>VIDEOS_DIR<br/>(*.mp4)")]
+        MakeMP3["MP3 Generator (make_mp3.py)<br/>• High-quality libmp3lame (-q:a 0)<br/>• Universal device compatibility"]
+        MP3s[("MP3 Archive<br/>MP3_DIR<br/>(*.mp3)")]
     end
 
     %% Connections
@@ -80,6 +82,8 @@ flowchart TD
     Verified --> MakeVideo
     BgImage --> MakeVideo
     MakeVideo --> Videos
+    Verified --> MakeMP3
+    MakeMP3 --> MP3s
 ```
 
 ---
@@ -233,14 +237,33 @@ Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and generates OLED-safe, multil
   python3 pipeline_orchestrator.py --make-videos --all
   ```
 
+**Generate MP3 Audio:**
+Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and converts them into highest-quality MP3s (`-codec:a libmp3lame -q:a 0`) in `MP3_DIR` for universal compatibility across devices, media players, and phones.
+- **Interactive Date Prompt (Default):** Prompts for date filter options (single date, date range, or all songs) if no date arguments are provided.
+- Standalone execution:
+  ```bash
+  python3 pipeline_orchestrator.py --make-mp3
+  # or directly using the module:
+  python3 -m post_processing.make_mp3
+  ```
+- Scoped to a specific date or date range:
+  ```bash
+  python3 pipeline_orchestrator.py --make-mp3 --date "2026-09-06"
+  python3 pipeline_orchestrator.py --make-mp3 --start-date "2026-08-01" --end-date "2026-08-31"
+  ```
+- To generate MP3s for all songs without prompting for dates:
+  ```bash
+  python3 pipeline_orchestrator.py --make-mp3 --all
+  ```
+
 **Run Combined Post-Processing Stages:**
 When running multiple post-processing flags together without CLI date args, the orchestrator prompts for the date filter once and applies it across all selected stages:
 ```bash
-# Prompts for dates once, stages songs, asks verification, and renders videos:
-python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos
+# Prompts for dates once, stages songs, asks verification, and renders both videos and MP3s:
+python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos --make-mp3
 
 # Or process all songs across all stages without date prompting:
-python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos --all
+python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos --make-mp3 --all
 ```
 
 *(Note: Ensure an image exists at `assets/images/background.png` or specify a custom path in the code for video generation to work.)*

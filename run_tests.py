@@ -8,12 +8,34 @@ def main():
     Discovers and runs all tests matching the '*_test.py' pattern
     across the entire repository structure.
     """
+    # Provide mocks for third-party libraries if not installed in current environment
+    from unittest.mock import MagicMock
+    if 'requests' not in sys.modules:
+        try:
+            import requests
+        except ImportError:
+            mock_req = MagicMock()
+            class HTTPError(Exception): pass
+            class RequestException(Exception): pass
+            mock_req.exceptions = MagicMock()
+            mock_req.exceptions.HTTPError = HTTPError
+            mock_req.exceptions.RequestException = RequestException
+            sys.modules['requests'] = mock_req
+            sys.modules['requests.exceptions'] = mock_req.exceptions
+
+    for mod in ['dotenv', 'google', 'google.genai', 'google.genai.types']:
+        try:
+            __import__(mod)
+        except ImportError:
+            sys.modules[mod] = MagicMock()
+
     # Ensure standard fallback environment variables for headless/CI test discovery
     os.environ.setdefault("RAW_AUDIO_DIR", os.path.join(os.getcwd(), "raw_audio"))
     os.environ.setdefault("PROCESSED_AUDIO_DIR", os.path.join(os.getcwd(), "processed_audio"))
     os.environ.setdefault("STAGING_AUDIO_DIR", os.path.join(os.getcwd(), "staging_audio"))
     os.environ.setdefault("VERIFIED_AUDIO_DIR", os.path.join(os.getcwd(), "verified_audio"))
     os.environ.setdefault("VIDEOS_DIR", os.path.join(os.getcwd(), "verified_audio", "Videos"))
+    os.environ.setdefault("MP3_DIR", os.path.join(os.getcwd(), "verified_audio", "MP3"))
     os.environ.setdefault("PCO_APP_ID", "mock_app_id")
     os.environ.setdefault("PCO_SECRET", "mock_secret")
     os.environ.setdefault("GEMINI_API_KEY", "mock_gemini_api_key")

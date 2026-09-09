@@ -169,5 +169,19 @@ class TestPipelineOrchestratorBackfill(unittest.TestCase):
         self.assertEqual(kwargs.get("start_date"), "2026-08-01")
         self.assertEqual(kwargs.get("end_date"), "2026-08-31")
 
+    @patch('pipeline_orchestrator_backfill.make_mp3')
+    def test_main_backfill_post_processing_only_make_mp3(self, mock_make_mp3):
+        pipeline_orchestrator_backfill.main([
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-31",
+            "--make-mp3",
+            "--post-processing-only"
+        ])
+
+        mock_make_mp3.assert_called_once()
+        kwargs = mock_make_mp3.call_args[1]
+        self.assertEqual(kwargs.get("start_date"), "2026-08-01")
+        self.assertEqual(kwargs.get("end_date"), "2026-08-31")
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

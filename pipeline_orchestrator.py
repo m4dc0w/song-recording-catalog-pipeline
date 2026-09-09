@@ -18,6 +18,7 @@ from audio_segmentation.audio_segmentation import segment_service_audio
 from post_processing.copy_songs import copy_songs
 from post_processing.move_songs import move_songs
 from post_processing.make_videos import make_videos
+from post_processing.make_mp3 import make_mp3
 
 # Load environment variables
 load_dotenv()
@@ -28,6 +29,7 @@ PROCESSED_AUDIO_DIR: str = os.getenv("PROCESSED_AUDIO_DIR", os.path.join(os.getc
 STAGING_AUDIO_DIR: str = os.getenv("STAGING_AUDIO_DIR", os.path.join(os.getcwd(), "staging_audio"))
 VERIFIED_AUDIO_DIR: str = os.getenv("VERIFIED_AUDIO_DIR", os.path.join(os.getcwd(), "verified_audio"))
 VIDEOS_DIR: str = os.getenv("VIDEOS_DIR", os.path.join(VERIFIED_AUDIO_DIR, "Videos"))
+MP3_DIR: str = os.getenv("MP3_DIR", os.path.join(VERIFIED_AUDIO_DIR, "MP3"))
 DEFAULT_SERVICE_TYPE: str = os.getenv("PCO_SERVICE_TYPE_ID", "")
 FFMPEG_PATH: str = os.getenv("FFMPEG_PATH", "ffmpeg")
 
@@ -335,9 +337,14 @@ def main(cli_args: Optional[List[str]] = None) -> None:
         help="Run post-processing to generate MP4 videos from the verified audio recordings (prompts for dates if omitted)."
     )
     parser.add_argument(
+        "--make-mp3",
+        action="store_true",
+        help="Run post-processing to generate high-quality MP3 audio files from the verified recordings (prompts for dates if omitted)."
+    )
+    parser.add_argument(
         "--skip-post-processing",
         action="store_true",
-        help="Skip post-processing (publishing and video generation) when running the interactive pipeline."
+        help="Skip post-processing (publishing, video, and MP3 generation) when running the interactive pipeline."
     )
     
     if cli_args is not None:
@@ -349,7 +356,7 @@ def main(cli_args: Optional[List[str]] = None) -> None:
 
     # If no CLI arguments were passed (args length is zero), default to running the full
     # end-to-end pipeline including post-processing (staging, moving to verified, and video generation).
-    has_post_processing_flags = args.publish_staging or args.publish_verified or args.make_videos
+    has_post_processing_flags = args.publish_staging or args.publish_verified or args.make_videos or args.make_mp3
     if args_len == 0:
         args.publish_staging = True
         args.publish_verified = True
@@ -583,6 +590,26 @@ def main(cli_args: Optional[List[str]] = None) -> None:
             make_videos(
                 VERIFIED_AUDIO_DIR, 
                 VIDEOS_DIR, 
+                ffmpeg_path=FFMPEG_PATH,
+                target_date=p_target,
+                start_date=p_start,
+                end_date=p_end
+            )
+
+        # 8. Post-Processing: Generate MP3s
+        if args.make_mp3:
+            print("\n" + "=" * 50)
+            print("🎵 Post-Processing: Generating MP3 Audio")
+            print("=" * 50)
+            
+            p_target, p_start, p_end = resolve_post_proc_dates(
+                title="Date Filter for MP3 Generation",
+                all_label="generate MP3s for all songs"
+            )
+
+            make_mp3(
+                VERIFIED_AUDIO_DIR, 
+                MP3_DIR, 
                 ffmpeg_path=FFMPEG_PATH,
                 target_date=p_target,
                 start_date=p_start,

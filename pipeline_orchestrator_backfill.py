@@ -23,11 +23,13 @@ from pipeline_orchestrator import (
     STAGING_AUDIO_DIR,
     VERIFIED_AUDIO_DIR,
     VIDEOS_DIR,
+    MP3_DIR,
     FFMPEG_PATH
 )
 from post_processing.copy_songs import copy_songs
 from post_processing.move_songs import move_songs
 from post_processing.make_videos import make_videos
+from post_processing.make_mp3 import make_mp3
 
 def parse_date(date_str: str) -> datetime:
     try:
@@ -97,6 +99,11 @@ def main(cli_args: Optional[List[str]] = None) -> None:
         help="Run post-processing to generate MP4 videos from the verified audio recordings."
     )
     parser.add_argument(
+        "--make-mp3",
+        action="store_true",
+        help="Run post-processing to generate high-quality MP3 audio files from the verified recordings."
+    )
+    parser.add_argument(
         "--skip-post-processing",
         action="store_true",
         help="Skip post-processing after backfill."
@@ -115,6 +122,7 @@ def main(cli_args: Optional[List[str]] = None) -> None:
     publish_staging = bool(isinstance(getattr(args, 'publish_staging', False), bool) and args.publish_staging)
     publish_verified = bool(isinstance(getattr(args, 'publish_verified', False), bool) and args.publish_verified)
     make_videos_flag = bool(isinstance(getattr(args, 'make_videos', False), bool) and args.make_videos)
+    make_mp3_flag = bool(isinstance(getattr(args, 'make_mp3', False), bool) and args.make_mp3)
     skip_post_processing = bool(isinstance(getattr(args, 'skip_post_processing', False), bool) and args.skip_post_processing)
     post_processing_only = bool(isinstance(getattr(args, 'post_processing_only', False), bool) and args.post_processing_only)
 
@@ -122,6 +130,7 @@ def main(cli_args: Optional[List[str]] = None) -> None:
         publish_staging = False
         publish_verified = False
         make_videos_flag = False
+        make_mp3_flag = False
 
     service_type = getattr(args, 'service_type', None)
     if not service_type and not post_processing_only:
@@ -187,6 +196,18 @@ def main(cli_args: Optional[List[str]] = None) -> None:
             make_videos(
                 VERIFIED_AUDIO_DIR, 
                 VIDEOS_DIR, 
+                ffmpeg_path=FFMPEG_PATH,
+                start_date=start_date_str,
+                end_date=end_date_str
+            )
+
+        if make_mp3_flag:
+            print("\n" + "=" * 60)
+            print("🎵 Post-Processing: Generating MP3 Audio")
+            print("=" * 60)
+            make_mp3(
+                VERIFIED_AUDIO_DIR, 
+                MP3_DIR, 
                 ffmpeg_path=FFMPEG_PATH,
                 start_date=start_date_str,
                 end_date=end_date_str
@@ -316,6 +337,18 @@ def main(cli_args: Optional[List[str]] = None) -> None:
         make_videos(
             VERIFIED_AUDIO_DIR, 
             VIDEOS_DIR, 
+            ffmpeg_path=FFMPEG_PATH,
+            start_date=start_date_str,
+            end_date=end_date_str
+        )
+
+    if make_mp3_flag:
+        print("\n" + "=" * 60)
+        print("🎵 Post-Processing: Generating MP3 Audio")
+        print("=" * 60)
+        make_mp3(
+            VERIFIED_AUDIO_DIR, 
+            MP3_DIR, 
             ffmpeg_path=FFMPEG_PATH,
             start_date=start_date_str,
             end_date=end_date_str

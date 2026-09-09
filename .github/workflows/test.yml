@@ -39,6 +39,7 @@ jobs:
           STAGING_AUDIO_DIR: staging_audio
           VERIFIED_AUDIO_DIR: verified_audio
           VIDEOS_DIR: verified_audio/Videos
+          MP3_DIR: verified_audio/MP3
           PCO_APP_ID: mock_app_id
           PCO_SECRET: mock_secret
           GEMINI_API_KEY: mock_gemini_api_key

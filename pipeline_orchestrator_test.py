@@ -719,5 +719,23 @@ class TestPipelineOrchestrator(unittest.TestCase):
         self.assertEqual(start, "2026-08-01")
         self.assertEqual(end, "2026-08-31")
 
+    @patch('pipeline_orchestrator.make_mp3')
+    def test_main_make_mp3_with_date(self, mock_make_mp3):
+        pipeline_orchestrator.main(["--make-mp3", "--date", "2026-09-06"])
+        mock_make_mp3.assert_called_once()
+        kwargs = mock_make_mp3.call_args[1]
+        self.assertEqual(kwargs.get("target_date"), "2026-09-06")
+        self.assertIsNone(kwargs.get("start_date"))
+        self.assertIsNone(kwargs.get("end_date"))
+
+    @patch('pipeline_orchestrator.make_mp3')
+    def test_main_make_mp3_with_date_range(self, mock_make_mp3):
+        pipeline_orchestrator.main(["--make-mp3", "--start-date", "2026-08-01", "--end-date", "2026-08-31"])
+        mock_make_mp3.assert_called_once()
+        kwargs = mock_make_mp3.call_args[1]
+        self.assertIsNone(kwargs.get("target_date"))
+        self.assertEqual(kwargs.get("start_date"), "2026-08-01")
+        self.assertEqual(kwargs.get("end_date"), "2026-08-31")
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
