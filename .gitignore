@@ -239,7 +239,7 @@ __marimo__/
 # Secrets (CRITICAL)
 credentials.json
 *-service-account.json
--e 
+
 # Temporary AI Scripts
 tmp/
 temp/

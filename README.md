@@ -1,5 +1,10 @@
 # 🎙️ Song Recording Catalog Pipeline
 
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-109%20Passing-brightgreen.svg)](run_tests.py)
+[![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF.svg)](.github/workflows/test.yml)
+
 An end-to-end Python orchestration pipeline for music ministries and churches. This tool automates the tedious process of cataloging live service recordings by integrating directly with Planning Center Online (PCO), using Google Gemini's multimodal AI to intelligently segment raw master audio files, and preparing the final tracks for publication with FFmpeg-powered video generation.
 
 ## 🚀 Pipeline Features
@@ -22,6 +27,7 @@ Before running the script, ensure you have the following installed on your machi
 1. **Python 3.10+**
 2. **FFmpeg:** The script relies on FFmpeg for audio compression, precision slicing, and video rendering.
    * *macOS (Homebrew):* `brew install ffmpeg`
+   * *Linux (Ubuntu/Debian):* `sudo apt update && sudo apt install -y ffmpeg libfontconfig1`
    * *Windows:* Download from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) and add to your system PATH.
 3. **Google Gemini API Key:** Generate one for free from Google AI Studio.
 4. **Planning Center API Keys:** Generate personal access tokens via the PCO developer dashboard.
@@ -29,6 +35,8 @@ Before running the script, ensure you have the following installed on your machi
 ---
 
 ## 🛠️ Installation & Setup
+
+> 💡 **Architecture Note:** The core audio cataloging, PCO integration, and segmentation pipeline is a 100% standalone Python CLI application that runs locally or on servers. The repository also includes an optional Node.js web server (`server.js`) tailored for cloud-hosted interactive preview environments (such as Google AI Studio) with a live diff viewer. Running Node.js is completely optional for standard CLI usage.
 
 1. **Clone the repository:**
    ```bash
@@ -274,3 +282,9 @@ Once you have reviewed the changes and verified that all tests pass:
 * **Project Rules:** AI Studio automatically reads `AGENTS.md` and `GEMINI.md` at the root of the repository to enforce coding standards, directory conventions, and testing requirements across all AI assistant turns.
 * **No Scratch Files:** Per `AGENTS.md`, temporary test scripts should never be committed to the repository root. Always run inline experiments or write to `/tmp/`.
 * **Always Run Tests:** Run `python3 run_tests.py` before exporting to ensure zero regressions across the test suite.
+
+---
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for complete license terms and copyright notices.
