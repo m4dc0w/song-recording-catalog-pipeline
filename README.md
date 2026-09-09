@@ -20,6 +20,70 @@ An end-to-end Python orchestration pipeline for music ministries and churches. T
 
 ---
 
+## 🗺️ Pipeline Architecture & Workflow
+
+The diagram below illustrates the end-to-end data flow: from initial Planning Center plan queries and raw multitrack audio discovery, through Gemini-powered multimodal AI segmentation, to automated staging, human verification, and broadcast video generation.
+
+```mermaid
+flowchart TD
+    %% External Inputs & APIs
+    subgraph Inputs["1. Data Sources & Inputs"]
+        PCO["Planning Center Online<br/>(Services API)"]
+        RawAudio[("Raw Audio Storage<br/>RAW_AUDIO_DIR<br/>(*.wav)")]
+        BgImage["Background Artwork<br/>(assets/images/background.png)"]
+    end
+
+    %% Orchestrators
+    subgraph Orchestration["2. Orchestration Layer"]
+        CLI["pipeline_orchestrator.py<br/>(Interactive / Headless CLI)"]
+        Backfill["pipeline_orchestrator_backfill.py<br/>(Historical Batch Processor)"]
+    end
+
+    %% Ingestion & AI Segmentation
+    subgraph Segmentation["3. Multimodal AI Segmentation & Slicing"]
+        FetchPlan["Fetch Plan & Setlist<br/>(Date Query + 429 Retry Backoff)"]
+        MatchAudio["Audio Discovery & Match<br/>(Skips existing non-empty folders)"]
+        Downsample["FFmpeg MP3 Preview<br/>(Compressed audio generation)"]
+        Gemini["Google Gemini Multimodal AI<br/>(Self-critique prompt + timestamping)"]
+        Slicer["FFmpeg Track Slicing<br/>(3s crossfades + room decay buffers)"]
+        DawMarkers[("DAW Locators<br/>locators.txt")]
+    end
+
+    %% Storage & Post Processing
+    subgraph PostProcessing["4. Post-Processing & Publishing Pipeline"]
+        Processed[("Processed Tracks<br/>PROCESSED_AUDIO_DIR<br/>Song_01_Title - Date.wav")]
+        Stage["Stage Songs (copy_songs.py)<br/>• Strips prefix<br/>• Auto-suffixes duplicates: Title (2)"]
+        Staging[("Staging Directory<br/>STAGING_AUDIO_DIR<br/>(Ready for audio review)")]
+        Verify{"Human Verification<br/>(Audit tracks in staging)"}
+        Move["Publish Verified (move_songs.py)<br/>Safe move to verified archive"]
+        Verified[("Verified Archive<br/>VERIFIED_AUDIO_DIR<br/>Title - Date.wav")]
+        MakeVideo["Video Generator (make_videos.py)<br/>• 2-Pass FFmpeg loudnorm (-14 LUFS)<br/>• OLED-safe multiline typography"]
+        Videos[("Video Archive<br/>VIDEOS_DIR<br/>(*.mp4)")]
+    end
+
+    %% Connections
+    PCO --> FetchPlan
+    RawAudio --> MatchAudio
+    FetchPlan --> CLI
+    FetchPlan --> Backfill
+    MatchAudio --> Downsample
+    Downsample --> Gemini
+    Gemini --> DawMarkers
+    Gemini --> Slicer
+    Slicer --> Processed
+
+    Processed --> Stage
+    Stage --> Staging
+    Staging --> Verify
+    Verify -- "Approved (y)" --> Move
+    Move --> Verified
+    Verified --> MakeVideo
+    BgImage --> MakeVideo
+    MakeVideo --> Videos
+```
+
+---
+
 ## 📋 Prerequisites
 
 Before running the script, ensure you have the following installed on your machine:
