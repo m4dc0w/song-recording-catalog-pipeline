@@ -8,6 +8,16 @@ def main():
     Discovers and runs all tests matching the '*_test.py' pattern
     across the entire repository structure.
     """
+    # Ensure standard fallback environment variables for headless/CI test discovery
+    os.environ.setdefault("RAW_AUDIO_DIR", os.path.join(os.getcwd(), "raw_audio"))
+    os.environ.setdefault("PROCESSED_AUDIO_DIR", os.path.join(os.getcwd(), "processed_audio"))
+    os.environ.setdefault("STAGING_AUDIO_DIR", os.path.join(os.getcwd(), "staging_audio"))
+    os.environ.setdefault("VERIFIED_AUDIO_DIR", os.path.join(os.getcwd(), "verified_audio"))
+    os.environ.setdefault("VIDEOS_DIR", os.path.join(os.getcwd(), "verified_audio", "Videos"))
+    os.environ.setdefault("PCO_APP_ID", "mock_app_id")
+    os.environ.setdefault("PCO_SECRET", "mock_secret")
+    os.environ.setdefault("GEMINI_API_KEY", "mock_gemini_api_key")
+
     print("🚀 Discovering and running all unit tests...")
     print("=" * 60)
     

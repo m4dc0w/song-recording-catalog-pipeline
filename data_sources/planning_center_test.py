@@ -336,6 +336,8 @@ class TestPlanningCenterAPI(unittest.TestCase):
         self.assertEqual(service_types[1].id, "222")
         self.assertEqual(service_types[1].name, "Unknown Service Type")
 
+    @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
+    @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")
     @patch("data_sources.planning_center.time.sleep")
     @patch("data_sources.planning_center.requests.get")
     def test_make_pco_request_handles_429(self, mock_get, mock_sleep) -> None:

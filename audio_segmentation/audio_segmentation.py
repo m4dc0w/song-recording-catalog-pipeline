@@ -15,25 +15,19 @@ load_dotenv()
 # ==============================================================================
 # 1. PIPELINE CONFIGURATION & TUNING
 # ==============================================================================
-# Fetch storage paths dynamically from environment variables
-RAW_AUDIO_DIR = os.getenv("RAW_AUDIO_DIR")
-PROCESSED_AUDIO_DIR = os.getenv("PROCESSED_AUDIO_DIR")
+# Fetch storage paths dynamically from environment variables, falling back to local defaults
+RAW_AUDIO_DIR: str = os.getenv("RAW_AUDIO_DIR", os.path.join(os.getcwd(), "raw_audio"))
+PROCESSED_AUDIO_DIR: str = os.getenv("PROCESSED_AUDIO_DIR", os.path.join(os.getcwd(), "processed_audio"))
 
 # Allow overriding the FFmpeg binary path, fallback to system PATH "ffmpeg"
-FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
-if not FFMPEG_PATH.strip():
+FFMPEG_PATH: str = os.getenv("FFMPEG_PATH", "ffmpeg")
+if not FFMPEG_PATH or not FFMPEG_PATH.strip():
     FFMPEG_PATH = "ffmpeg"
 
 # Fetch the AI model dynamically, fallback to the stable 3.8 flash model
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-if not GEMINI_MODEL.strip():
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+if not GEMINI_MODEL or not GEMINI_MODEL.strip():
     GEMINI_MODEL = "gemini-3.8-flash"
-
-if not RAW_AUDIO_DIR or not PROCESSED_AUDIO_DIR:
-    raise ValueError(
-        "ERROR: Storage paths are missing. "
-        "Please define RAW_AUDIO_DIR and PROCESSED_AUDIO_DIR in your .env file."
-    )
 
 # --- Audio Extraction Tuning ---
 # Buffers added to AI-detected boundaries to capture natural acoustic room decay 
