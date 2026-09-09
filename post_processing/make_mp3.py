@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import json
+import wave
 import subprocess
 import argparse
 from pathlib import Path
@@ -16,8 +18,9 @@ def make_mp3(
     end_date: Optional[str] = None
 ) -> None:
     """
-    Generates high-quality MP3 audio files using FFmpeg (-codec:a libmp3lame -q:a 0)
-    for each matching .wav file in the source directory for broad compatibility across devices.
+    Generates high-quality MP3 audio files using 2-pass EBU R128 loudness normalization
+    (-14 LUFS), audio crossfades (afade), and FFmpeg libmp3lame (-q:a 0) for each matching
+    .wav file in the source directory for broad compatibility across devices.
     Optionally filters by target_date (YYYY-MM-DD) or date range (start_date to end_date).
     """
     if not os.path.exists(src_dir):
@@ -80,22 +83,68 @@ def make_mp3(
         print(f"Processing: {song_title}")
         print("=" * 53)
 
-        cmd = [
-            ffmpeg_path, "-y", "-hide_banner", "-nostats",
-            "-i", full_audio_path,
-            "-codec:a", "libmp3lame",
-            "-q:a", "0",
-            output_file
-        ]
-
         try:
+            print("  -> Pass 1: Analyzing audio dynamics...")
+            # Pass 1: loudnorm analysis
+            pass1_cmd = [
+                ffmpeg_path, "-hide_banner", "-nostats", "-i", full_audio_path,
+                "-af", "loudnorm=I=-14:TP=-1:print_format=json",
+                "-f", "null", "-"
+            ]
+            
+            # FFmpeg writes loudnorm JSON to stderr
+            result = subprocess.run(pass1_cmd, stderr=subprocess.PIPE, text=True, check=False)
+            
+            # Parse the JSON from the output block
+            stderr_output = result.stderr
+            try:
+                json_start = stderr_output.find("{")
+                json_end = stderr_output.rfind("}") + 1
+                if json_start == -1 or json_end == 0:
+                    raise ValueError("No JSON found in FFmpeg output")
+                    
+                stats_json = json.loads(stderr_output[json_start:json_end])
+                
+                measured_i = stats_json["input_i"]
+                measured_tp = stats_json["input_tp"]
+                measured_lra = stats_json["input_lra"]
+                measured_thresh = stats_json["input_thresh"]
+                target_offset = stats_json["target_offset"]
+                
+            except (ValueError, KeyError, json.JSONDecodeError) as e:
+                print(f"  -> Error: Could not analyze audio dynamics for {song_title}. Skipping.")
+                continue
+
+            print("  -> Pass 2: Rendering final MP3 with loudnorm normalization, crossfades, and high-quality LAME encoding...")
+            
+            # Calculate duration to set the fade-out start time
+            with wave.open(full_audio_path, 'r') as wav:
+                frames = wav.getnframes()
+                rate = wav.getframerate()
+                duration = frames / float(rate)
+            
+            fade_s = 3.0
+            fade_out_start = max(0, duration - fade_s)
+            
+            loudnorm_filter = f"loudnorm=I=-14:TP=-1:measured_I={measured_i}:measured_TP={measured_tp}:measured_LRA={measured_lra}:measured_thresh={measured_thresh}:offset={target_offset}:linear=true"
+            fade_filter = f"afade=t=in:st=0:d={fade_s},afade=t=out:st={fade_out_start:.3f}:d={fade_s}"
+
+            cmd = [
+                ffmpeg_path, "-y", "-hide_banner", "-nostats",
+                "-i", full_audio_path,
+                "-af", f"{loudnorm_filter},{fade_filter}",
+                "-codec:a", "libmp3lame",
+                "-q:a", "0",
+                output_file
+            ]
+
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             print(f"  -> ✅ Success: {os.path.basename(output_file)}")
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             print(f"  -> ❌ Error converting to MP3: {e}")
 
     print("=" * 53)
-    print("All MP3s generated successfully!")
+    print("All MP3s generated and audio precision-normalized successfully!")
 
 
 def main(cli_args: Optional[List[str]] = None) -> None:

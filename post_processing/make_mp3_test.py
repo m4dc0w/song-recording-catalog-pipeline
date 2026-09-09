@@ -26,15 +26,28 @@ class TestMakeMp3(unittest.TestCase):
 
     @patch('subprocess.run')
     def test_make_mp3_success(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stderr = 'some log text { "input_i": "-20.0", "input_tp": "-2.0", "input_lra": "5.0", "input_thresh": "-30.0", "target_offset": "0.5" } end log'
+        mock_subprocess.return_value = mock_result
+
         self.create_dummy_wav(os.path.join(self.src_dir, "Test - Song.wav"))
         make_mp3(self.src_dir, self.dest_dir, ffmpeg_path="ffmpeg")
 
-        self.assertEqual(mock_subprocess.call_count, 1)
-        cmd_args = mock_subprocess.call_args[0][0]
-        cmd_str = " ".join(cmd_args)
-        self.assertIn("Test - Song.wav", cmd_str)
-        self.assertIn("-codec:a libmp3lame -q:a 0", cmd_str)
-        self.assertTrue(cmd_args[-1].endswith("Test - Song.mp3"))
+        self.assertEqual(mock_subprocess.call_count, 2)
+        
+        # Pass 1 assertion
+        pass1_call = mock_subprocess.call_args_list[0][0][0]
+        pass1_cmd_str = " ".join(pass1_call)
+        self.assertIn("loudnorm=I=-14:TP=-1:print_format=json", pass1_cmd_str)
+
+        # Pass 2 assertion
+        pass2_call = mock_subprocess.call_args_list[1][0][0]
+        pass2_cmd_str = " ".join(pass2_call)
+        self.assertIn("Test - Song.wav", pass2_cmd_str)
+        self.assertIn("-codec:a libmp3lame -q:a 0", pass2_cmd_str)
+        self.assertIn("loudnorm=I=-14:TP=-1:measured_I=-20.0", pass2_cmd_str)
+        self.assertIn("afade=t=in:st=0:d=3.0", pass2_cmd_str)
+        self.assertTrue(pass2_call[-1].endswith("Test - Song.mp3"))
 
     def test_make_mp3_skips_existing(self):
         self.create_dummy_wav(os.path.join(self.src_dir, "ExistingSong.wav"))
@@ -47,6 +60,10 @@ class TestMakeMp3(unittest.TestCase):
 
     @patch('subprocess.run')
     def test_make_mp3_filter_by_target_date(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stderr = 'some log text { "input_i": "-20.0", "input_tp": "-2.0", "input_lra": "5.0", "input_thresh": "-30.0", "target_offset": "0.5" } end log'
+        mock_subprocess.return_value = mock_result
+
         self.create_dummy_wav(os.path.join(self.src_dir, "Song A - 2026-09-06.wav"))
         self.create_dummy_wav(os.path.join(self.src_dir, "Song B - 2026-09-13.wav"))
 
@@ -56,13 +73,17 @@ class TestMakeMp3(unittest.TestCase):
             target_date="2026-09-06"
         )
 
-        self.assertEqual(mock_subprocess.call_count, 1)
-        cmd_str = " ".join(mock_subprocess.call_args[0][0])
+        self.assertEqual(mock_subprocess.call_count, 2)
+        cmd_str = " ".join(mock_subprocess.call_args_list[1][0][0])
         self.assertIn("Song A - 2026-09-06.wav", cmd_str)
         self.assertNotIn("Song B - 2026-09-13.wav", cmd_str)
 
     @patch('subprocess.run')
     def test_make_mp3_filter_by_date_range(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stderr = 'some log text { "input_i": "-20.0", "input_tp": "-2.0", "input_lra": "5.0", "input_thresh": "-30.0", "target_offset": "0.5" } end log'
+        mock_subprocess.return_value = mock_result
+
         self.create_dummy_wav(os.path.join(self.src_dir, "Song A - 2026-08-20.wav"))
         self.create_dummy_wav(os.path.join(self.src_dir, "Song B - 2026-09-06.wav"))
         self.create_dummy_wav(os.path.join(self.src_dir, "Song C - 2026-10-01.wav"))
@@ -74,8 +95,8 @@ class TestMakeMp3(unittest.TestCase):
             end_date="2026-09-30"
         )
 
-        self.assertEqual(mock_subprocess.call_count, 1)
-        cmd_str = " ".join(mock_subprocess.call_args[0][0])
+        self.assertEqual(mock_subprocess.call_count, 2)
+        cmd_str = " ".join(mock_subprocess.call_args_list[1][0][0])
         self.assertIn("Song B - 2026-09-06.wav", cmd_str)
         self.assertNotIn("Song A - 2026-08-20.wav", cmd_str)
         self.assertNotIn("Song C - 2026-10-01.wav", cmd_str)
@@ -103,16 +124,34 @@ class TestMakeMp3(unittest.TestCase):
             mock_subprocess.assert_not_called()
 
     @patch('subprocess.run')
-    def test_make_mp3_handles_ffmpeg_error(self, mock_subprocess):
-        self.create_dummy_wav(os.path.join(self.src_dir, "Error - Song.wav"))
-        mock_subprocess.side_effect = subprocess.CalledProcessError(1, ["ffmpeg"])
+    def test_make_mp3_invalid_loudnorm_json(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stderr = "No valid json"
+        mock_subprocess.return_value = mock_result
 
-        # Should not raise exception
+        self.create_dummy_wav(os.path.join(self.src_dir, "Song.wav"))
         make_mp3(self.src_dir, self.dest_dir)
+        # Only Pass 1 attempted, Pass 2 skipped due to invalid JSON
         self.assertEqual(mock_subprocess.call_count, 1)
 
     @patch('subprocess.run')
+    def test_make_mp3_handles_ffmpeg_error(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stderr = 'some log text { "input_i": "-20.0", "input_tp": "-2.0", "input_lra": "5.0", "input_thresh": "-30.0", "target_offset": "0.5" } end log'
+        mock_subprocess.side_effect = [mock_result, subprocess.CalledProcessError(1, ["ffmpeg"])]
+
+        self.create_dummy_wav(os.path.join(self.src_dir, "Error - Song.wav"))
+
+        # Should not raise unhandled exception
+        make_mp3(self.src_dir, self.dest_dir)
+        self.assertEqual(mock_subprocess.call_count, 2)
+
+    @patch('subprocess.run')
     def test_make_mp3_main_cli(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stderr = 'some log text { "input_i": "-20.0", "input_tp": "-2.0", "input_lra": "5.0", "input_thresh": "-30.0", "target_offset": "0.5" } end log'
+        mock_subprocess.return_value = mock_result
+
         self.create_dummy_wav(os.path.join(self.src_dir, "CLI - Song.wav"))
         main([
             "--src-dir", self.src_dir,
@@ -128,7 +167,7 @@ class TestMakeMp3(unittest.TestCase):
             "--dest-dir", self.dest_dir,
             "--date", "2026-09-06"
         ])
-        self.assertEqual(mock_subprocess.call_count, 1)
+        self.assertEqual(mock_subprocess.call_count, 2)
 
 if __name__ == '__main__':
     unittest.main()

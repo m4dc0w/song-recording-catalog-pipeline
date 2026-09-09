@@ -59,7 +59,7 @@ flowchart TD
         Verified[("Verified Archive<br/>VERIFIED_AUDIO_DIR<br/>Title - Date.wav")]
         MakeVideo["Video Generator (make_videos.py)<br/>• 2-Pass FFmpeg loudnorm (-14 LUFS)<br/>• OLED-safe multiline typography"]
         Videos[("Video Archive<br/>VIDEOS_DIR<br/>(*.mp4)")]
-        MakeMP3["MP3 Generator (make_mp3.py)<br/>• High-quality libmp3lame (-q:a 0)<br/>• Universal device compatibility"]
+        MakeMP3["MP3 Generator (make_mp3.py)<br/>• 2-Pass FFmpeg loudnorm (-14 LUFS) & afade<br/>• High-quality libmp3lame (-q:a 0)"]
         MP3s[("MP3 Archive<br/>MP3_DIR<br/>(*.mp3)")]
     end
 
@@ -238,7 +238,7 @@ Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and generates OLED-safe, multil
   ```
 
 **Generate MP3 Audio:**
-Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and converts them into highest-quality MP3s (`-codec:a libmp3lame -q:a 0`) in `MP3_DIR` for universal compatibility across devices, media players, and phones.
+Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and converts them into normalized MP3s with EBU R128 loudness normalization (`-14 LUFS`), subtle 3-second audio crossfades (`afade`), and highest-quality LAME variable bitrate (`-codec:a libmp3lame -q:a 0`) in `MP3_DIR` for universal compatibility across devices, media players, and phones.
 - **Interactive Date Prompt (Default):** Prompts for date filter options (single date, date range, or all songs) if no date arguments are provided.
 - Standalone execution:
   ```bash
