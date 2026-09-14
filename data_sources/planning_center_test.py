@@ -1,5 +1,6 @@
 import os
 import unittest
+from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 
 import requests
@@ -152,7 +153,12 @@ class TestPlanningCenterAPI(unittest.TestCase):
         # Assertions
         mock_get.assert_called_once()
         self.assertIn("service_types/123/plans", mock_get.call_args[0][0])
-        self.assertEqual(mock_get.call_args[1]["params"], {"per_page": 2, "order": "-sort_date", "filter": "past"})
+        params = mock_get.call_args[1]["params"]
+        self.assertEqual(params["per_page"], 2)
+        self.assertEqual(params["order"], "-sort_date")
+        self.assertEqual(params["filter"], "before,after")
+        self.assertTrue("before" in params)
+        self.assertTrue("after" in params)
         
         self.assertEqual(len(recent_plans), 2)
         
@@ -171,6 +177,43 @@ class TestPlanningCenterAPI(unittest.TestCase):
         self.assertEqual(recent_plans[1].dates_raw, "August 30, 2026")
         self.assertEqual(recent_plans[1].date, "2026-08-30")
         self.assertEqual(recent_plans[1].title, "")
+
+    @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
+    @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")
+    @patch("data_sources.planning_center.requests.get")
+    def test_fetch_recent_plans_includes_today_with_date_filter(self, mock_get) -> None:
+        """Verifies that fetch_recent_plans defaults to a 5-week date filter covering today's date."""
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        mock_json_data = {
+            "data": [
+                {
+                    "id": "99999",
+                    "attributes": {
+                        "dates": "September 13, 2026",
+                        "sort_date": f"{today_str}T10:30:00Z",
+                        "title": "Today's Service"
+                    }
+                }
+            ]
+        }
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_json_data
+        mock_get.return_value = mock_response
+
+        plans = fetch_recent_plans("123")
+
+        mock_get.assert_called_once()
+        params = mock_get.call_args[1]["params"]
+        self.assertEqual(params["filter"], "before,after")
+        self.assertEqual(params["per_page"], 5)
+        self.assertEqual(params["order"], "-sort_date")
+
+        # Verify before timestamp is inclusive of today (tomorrow's date T23:59:59Z)
+        tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        self.assertEqual(params["before"], f"{tomorrow_str}T23:59:59Z")
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0].id, "99999")
+        self.assertEqual(plans[0].title, "Today's Service")
 
     @patch("data_sources.planning_center.PCO_APP_ID", "mock_app_id")
     @patch("data_sources.planning_center.PCO_SECRET", "mock_secret")

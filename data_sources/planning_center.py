@@ -182,8 +182,20 @@ def fetch_recent_plans(
     effective_limit = limit if limit is not None else (100 if (target_date or (start_date and end_date)) else 5)
     per_page = min(effective_limit, 100)
     
-    params: Dict[str, Any] = {"per_page": per_page, "order": "-sort_date", "filter": "past"}
-    
+    now = datetime.now()
+    tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    weeks_to_fetch = max(5, effective_limit)
+    start_dt = now - timedelta(weeks=weeks_to_fetch)
+    recent_after_str = (start_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    recent_params: Dict[str, Any] = {
+        "filter": "before,after",
+        "after": f"{recent_after_str}T00:00:00Z",
+        "before": f"{tomorrow_str}T23:59:59Z",
+        "order": "-sort_date",
+        "per_page": per_page
+    }
+
     if target_date:
         try:
             dt = datetime.strptime(target_date, "%Y-%m-%d")
@@ -198,7 +210,8 @@ def fetch_recent_plans(
             }
             print(f"📡 Querying Planning Center for plans around date '{target_date}' (up to {effective_limit})...")
         except ValueError:
-            print(f"📡 Fetching up to {effective_limit} recent plans from Planning Center...")
+            params = recent_params
+            print(f"📡 Fetching up to {effective_limit} recent plans (last 5 weeks, inclusive of today) from Planning Center...")
     elif start_date and end_date:
         try:
             s_dt = datetime.strptime(start_date, "%Y-%m-%d")
@@ -214,9 +227,11 @@ def fetch_recent_plans(
             }
             print(f"📡 Querying Planning Center for plans between {start_date} and {end_date} (up to {effective_limit})...")
         except ValueError:
-            print(f"📡 Fetching up to {effective_limit} recent plans from Planning Center...")
+            params = recent_params
+            print(f"📡 Fetching up to {effective_limit} recent plans (last 5 weeks, inclusive of today) from Planning Center...")
     else:
-        print(f"📡 Fetching up to {effective_limit} recent plans from Planning Center...")
+        params = recent_params
+        print(f"📡 Fetching up to {effective_limit} recent plans (last 5 weeks, inclusive of today) from Planning Center...")
 
     recent_plans: List[PlanSummary] = []
     use_date_filter = params.get("filter") == "before,after"
