@@ -111,25 +111,25 @@ def enrich_song_keys(
 
             # Check if key is already present in filename
             if song.key:
-                print(f"  ⏭️ Skipping (already has key '{song.key}'): {filename}")
+                print(f"  ⏭️ Skipping (already has key '{song.key}'): {old_path}")
                 continue
 
             # Query Planning Center for songs on this date
             pco_songs = provider.get_songs_for_date(song.date)
             if not pco_songs:
-                print(f"  ⚠️ No Planning Center songs found for date {song.date}: {filename}")
+                print(f"  ⚠️ No Planning Center songs found for date {song.date}: {old_path}")
                 continue
 
             # Perform exact or heuristic fuzzy match
             matched_song = find_matching_song(song.title, pco_songs)
             if not matched_song:
-                print(f"  ❌ No matching song found in Planning Center setlist for '{song.title}' ({song.date})")
+                print(f"  ❌ No matching song found in Planning Center setlist for '{song.title}' ({song.date}): {old_path}")
                 continue
 
             # Extract key from matching song
             key = extract_key_from_song(matched_song)
             if not key:
-                print(f"  ⚠️ Match found ('{matched_song.title}'), but no key information recorded in Planning Center.")
+                print(f"  ⚠️ Match found ('{matched_song.title}'), but no key information recorded in Planning Center for: {old_path}")
                 continue
 
             # Create enriched filename
@@ -141,18 +141,18 @@ def enrich_song_keys(
                 continue
 
             if new_path.exists():
-                print(f"  ⚠️ Target file already exists, skipping: {new_filename}")
+                print(f"  ⚠️ Target file already exists, skipping: {new_path}")
                 continue
 
             if not dry_run:
                 try:
                     os.rename(old_path, new_path)
-                    print(f"  ✅ Renamed: {filename} ➔ {new_filename}")
+                    print(f"  ✅ Renamed: {old_path} ➔ {new_path}")
                 except OSError as e:
-                    print(f"  ❌ Error renaming {filename} to {new_filename}: {e}")
+                    print(f"  ❌ Error renaming {old_path} to {new_path}: {e}")
                     continue
             else:
-                print(f"  [DRY RUN] Would rename: {filename} ➔ {new_filename}")
+                print(f"  [DRY RUN] Would rename: {old_path} ➔ {new_path}")
 
             renamed_pairs.append((str(old_path), str(new_path)))
 
