@@ -179,6 +179,18 @@ def main(cli_args: Optional[List[str]] = None) -> None:
             )
             print(f"\n🎧 Songs have been successfully staged in: {STAGING_AUDIO_DIR}")
 
+        if enrich_keys_flag:
+            print("\n" + "=" * 60)
+            print("🎹 Post-Processing: Enriching Filenames with Musical Keys")
+            print("=" * 60)
+            target_dirs = [STAGING_AUDIO_DIR] if (publish_staging or publish_verified) else [VERIFIED_AUDIO_DIR, MP3_DIR, VIDEOS_DIR]
+            enrich_song_keys(
+                directories=target_dirs,
+                service_type_id=service_type,
+                start_date=start_date_str,
+                end_date=end_date_str
+            )
+
         if publish_verified:
             print("\n" + "=" * 60)
             print("🚚 Post-Processing: Publishing Verified Songs")
@@ -217,17 +229,6 @@ def main(cli_args: Optional[List[str]] = None) -> None:
                 VERIFIED_AUDIO_DIR, 
                 MP3_DIR, 
                 ffmpeg_path=FFMPEG_PATH,
-                start_date=start_date_str,
-                end_date=end_date_str
-            )
-
-        if enrich_keys_flag:
-            print("\n" + "=" * 60)
-            print("🎹 Post-Processing: Enriching Filenames with Musical Keys")
-            print("=" * 60)
-            enrich_song_keys(
-                directories=[VERIFIED_AUDIO_DIR, MP3_DIR, VIDEOS_DIR],
-                service_type_id=service_type,
                 start_date=start_date_str,
                 end_date=end_date_str
             )
@@ -331,6 +332,18 @@ def main(cli_args: Optional[List[str]] = None) -> None:
         )
         print(f"\n🎧 Songs have been successfully staged in: {STAGING_AUDIO_DIR}")
 
+    if enrich_keys_flag:
+        print("\n" + "=" * 60)
+        print("🎹 Post-Processing: Enriching Filenames with Musical Keys")
+        print("=" * 60)
+        target_dirs = [STAGING_AUDIO_DIR] if (publish_staging or publish_verified) else [VERIFIED_AUDIO_DIR, MP3_DIR, VIDEOS_DIR]
+        enrich_song_keys(
+            directories=target_dirs,
+            service_type_id=service_type,
+            start_date=start_date_str,
+            end_date=end_date_str
+        )
+
     if publish_verified:
         print("\n" + "=" * 60)
         print("🚚 Post-Processing: Publishing Verified Songs")
@@ -369,17 +382,6 @@ def main(cli_args: Optional[List[str]] = None) -> None:
             VERIFIED_AUDIO_DIR, 
             MP3_DIR, 
             ffmpeg_path=FFMPEG_PATH,
-            start_date=start_date_str,
-            end_date=end_date_str
-        )
-
-    if enrich_keys_flag:
-        print("\n" + "=" * 60)
-        print("🎹 Post-Processing: Enriching Filenames with Musical Keys")
-        print("=" * 60)
-        enrich_song_keys(
-            directories=[VERIFIED_AUDIO_DIR, MP3_DIR, VIDEOS_DIR],
-            service_type_id=service_type,
             start_date=start_date_str,
             end_date=end_date_str
         )

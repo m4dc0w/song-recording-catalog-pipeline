@@ -194,8 +194,41 @@ class TestPipelineOrchestratorBackfill(unittest.TestCase):
 
         mock_enrich.assert_called_once()
         kwargs = mock_enrich.call_args[1]
+        self.assertEqual(kwargs.get("directories"), [
+            pipeline_orchestrator_backfill.VERIFIED_AUDIO_DIR,
+            pipeline_orchestrator_backfill.MP3_DIR,
+            pipeline_orchestrator_backfill.VIDEOS_DIR
+        ])
         self.assertEqual(kwargs.get("start_date"), "2026-08-01")
         self.assertEqual(kwargs.get("end_date"), "2026-08-31")
+
+    @patch('pipeline_orchestrator_backfill.copy_songs')
+    @patch('pipeline_orchestrator_backfill.enrich_song_keys')
+    @patch('pipeline_orchestrator_backfill.move_songs')
+    @patch('pipeline_orchestrator_backfill.input', return_value='y')
+    def test_main_backfill_post_processing_enrich_keys_in_staging(
+        self, mock_input, mock_move, mock_enrich, mock_copy
+    ):
+        call_order = []
+        mock_copy.side_effect = lambda *a, **kw: call_order.append("copy_songs")
+        mock_enrich.side_effect = lambda *a, **kw: call_order.append("enrich_song_keys")
+        mock_move.side_effect = lambda *a, **kw: call_order.append("move_songs")
+
+        pipeline_orchestrator_backfill.main([
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-31",
+            "--publish-staging",
+            "--enrich-keys",
+            "--publish-verified",
+            "--post-processing-only"
+        ])
+
+        mock_copy.assert_called_once()
+        mock_enrich.assert_called_once()
+        mock_move.assert_called_once()
+        self.assertEqual(call_order, ["copy_songs", "enrich_song_keys", "move_songs"])
+        kwargs = mock_enrich.call_args[1]
+        self.assertEqual(kwargs.get("directories"), [pipeline_orchestrator_backfill.STAGING_AUDIO_DIR])
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

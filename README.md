@@ -56,14 +56,14 @@ flowchart TD
         Processed[("Processed Tracks<br/>PROCESSED_AUDIO_DIR<br/>Song_01_Title - Date.wav")]
         Stage["Stage Songs (copy_songs.py)<br/>• Strips prefix<br/>• Auto-suffixes duplicates: Title (2)"]
         Staging[("Staging Directory<br/>STAGING_AUDIO_DIR<br/>(Ready for audio review)")]
+        EnrichKeys["Key Enrichment (enrich_song_keys.py)<br/>• Matches PCO setlist keys<br/>• Enriches staging tracks (Title - Key - Date)<br/>• Manual runs enrich Verified, MP3s, Videos"]
         Verify{"Human Verification<br/>(Audit tracks in staging)"}
         Move["Publish Verified (move_songs.py)<br/>Safe move to verified archive"]
-        Verified[("Verified Archive<br/>VERIFIED_AUDIO_DIR<br/>Title - Date.wav")]
+        Verified[("Verified Archive<br/>VERIFIED_AUDIO_DIR<br/>Title - Key - Date.wav")]
         MakeVideo["Video Generator (make_videos.py)<br/>• 2-Pass FFmpeg loudnorm (-14 LUFS)<br/>• OLED-safe multiline typography"]
         Videos[("Video Archive<br/>VIDEOS_DIR<br/>(*.mp4)")]
         MakeMP3["MP3 Generator (make_mp3.py)<br/>• 2-Pass FFmpeg loudnorm (-14 LUFS) & afade<br/>• High-quality libmp3lame (-q:a 0)"]
         MP3s[("MP3 Archive<br/>MP3_DIR<br/>(*.mp3)")]
-        EnrichKeys["Key Enrichment (enrich_song_keys.py)<br/>• Matches PCO setlist keys<br/>• Supports key modulations (D-E)<br/>• Renames across Verified, MP3s, Videos"]
     end
 
     %% Connections
@@ -79,7 +79,9 @@ flowchart TD
 
     Processed --> Stage
     Stage --> Staging
-    Staging --> Verify
+    Staging --> EnrichKeys
+    PCO --> EnrichKeys
+    EnrichKeys --> Verify
     Verify -- "Approved (y)" --> Move
     Move --> Verified
     Verified --> MakeVideo
@@ -87,8 +89,6 @@ flowchart TD
     MakeVideo --> Videos
     Verified --> MakeMP3
     MakeMP3 --> MP3s
-    Verified --> EnrichKeys
-    PCO --> EnrichKeys
 ```
 
 ---
@@ -262,7 +262,9 @@ Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and converts them into normaliz
   ```
 
 **Enrich Song Keys (Planning Center Integration):**
-Scans your `VERIFIED_AUDIO_DIR`, `MP3_DIR`, and `VIDEOS_DIR` (or custom directories) for media files (`.wav`, `.mp3`, `.mp4`), fetches the scheduled songs and musical keys from Planning Center for that service date, and renames files to embed the musical key (e.g., `<Title> - <Key> - <Date>.<ext>`).
+Enriches song tracks with their musical keys from Planning Center (e.g., `<Title> - <Key> - <Date>.<ext>`).
+- **Pipeline Stage (Staging):** When run in the post-processing pipeline, key enrichment executes right before songs are published to `VERIFIED_AUDIO_DIR`, so songs in `STAGING_AUDIO_DIR` are enriched prior to video and MP3 generation.
+- **Manual Runs (Verified / MP3 / Video Archives):** When invoked standalone (e.g. `--enrich-keys`), it scans and enriches existing files across `VERIFIED_AUDIO_DIR`, `MP3_DIR`, and `VIDEOS_DIR` (or custom directories).
 - **Key Modulation Support:** Fully supports both single keys (`E`, `Bm`, `Eb/G`) and key modulations/transitions (e.g., `D-E`, `C-D-E`, `Eb-F`).
 - **Heuristics & Clean Matching:** Uses exact title matching, normalized prefix heuristics, and parenthetical key extraction with automatic skipping for files that already have keys or where target filenames already exist.
 - **Interactive Date Prompt (Default):** Prompts for date filter options (single date, date range, or all songs) if no date arguments are provided.
@@ -289,11 +291,11 @@ Scans your `VERIFIED_AUDIO_DIR`, `MP3_DIR`, and `VIDEOS_DIR` (or custom director
 **Run Combined Post-Processing Stages:**
 When running multiple post-processing flags together without CLI date args, the orchestrator prompts for the date filter once and applies it across all selected stages:
 ```bash
-# Prompts for dates once, stages songs, asks verification, renders videos and MP3s, and enriches keys:
-python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos --make-mp3 --enrich-keys
+# Prompts for dates once, stages songs, enriches keys in staging, asks verification, and renders videos and MP3s:
+python3 pipeline_orchestrator.py --publish-staging --enrich-keys --publish-verified --make-videos --make-mp3
 
 # Or process all songs across all stages without date prompting:
-python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos --make-mp3 --enrich-keys --all
+python3 pipeline_orchestrator.py --publish-staging --enrich-keys --publish-verified --make-videos --make-mp3 --all
 ```
 
 *(Note: Ensure an image exists at `assets/images/background.png` or specify a custom path in the code for video generation to work.)*

@@ -742,6 +742,11 @@ class TestPipelineOrchestrator(unittest.TestCase):
         pipeline_orchestrator.main(["--enrich-keys", "--date", "2026-09-06"])
         mock_enrich.assert_called_once()
         kwargs = mock_enrich.call_args[1]
+        self.assertEqual(kwargs.get("directories"), [
+            pipeline_orchestrator.VERIFIED_AUDIO_DIR,
+            pipeline_orchestrator.MP3_DIR,
+            pipeline_orchestrator.VIDEOS_DIR
+        ])
         self.assertEqual(kwargs.get("target_date"), "2026-09-06")
         self.assertIsNone(kwargs.get("start_date"))
         self.assertIsNone(kwargs.get("end_date"))
@@ -751,9 +756,70 @@ class TestPipelineOrchestrator(unittest.TestCase):
         pipeline_orchestrator.main(["--enrich-keys", "--start-date", "2026-08-01", "--end-date", "2026-08-31"])
         mock_enrich.assert_called_once()
         kwargs = mock_enrich.call_args[1]
+        self.assertEqual(kwargs.get("directories"), [
+            pipeline_orchestrator.VERIFIED_AUDIO_DIR,
+            pipeline_orchestrator.MP3_DIR,
+            pipeline_orchestrator.VIDEOS_DIR
+        ])
         self.assertIsNone(kwargs.get("target_date"))
         self.assertEqual(kwargs.get("start_date"), "2026-08-01")
         self.assertEqual(kwargs.get("end_date"), "2026-08-31")
+
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.enrich_song_keys')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.input', return_value='y')
+    def test_main_pipeline_enrich_keys_in_staging_before_publish_verified(
+        self, mock_input, mock_move_songs, mock_enrich, mock_copy_songs
+    ):
+        """Verify Enrich Song Keys runs in staging directory right before Publish Verified Songs."""
+        call_order = []
+        mock_copy_songs.side_effect = lambda *a, **kw: call_order.append("copy_songs")
+        mock_enrich.side_effect = lambda *a, **kw: call_order.append("enrich_song_keys")
+        mock_move_songs.side_effect = lambda *a, **kw: call_order.append("move_songs")
+
+        pipeline_orchestrator.main([
+            "--publish-staging",
+            "--enrich-keys",
+            "--publish-verified",
+            "--date", "2026-09-06"
+        ])
+
+        mock_copy_songs.assert_called_once()
+        mock_enrich.assert_called_once()
+        mock_move_songs.assert_called_once()
+
+        # Check that Enrich Song Keys targeted STAGING_AUDIO_DIR
+        kwargs = mock_enrich.call_args[1]
+        self.assertEqual(kwargs.get("directories"), [pipeline_orchestrator.STAGING_AUDIO_DIR])
+        self.assertEqual(kwargs.get("target_date"), "2026-09-06")
+
+        # Verify execution order: copy_songs -> enrich_song_keys -> move_songs
+        self.assertEqual(call_order, ["copy_songs", "enrich_song_keys", "move_songs"])
+
+    @patch('pipeline_orchestrator.enrich_song_keys')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.input', return_value='y')
+    def test_main_pipeline_enrich_keys_with_publish_verified_targets_staging(
+        self, mock_input, mock_move_songs, mock_enrich
+    ):
+        """When enrich_keys is run alongside publish_verified, it targets the staging directory before moving."""
+        call_order = []
+        mock_enrich.side_effect = lambda *a, **kw: call_order.append("enrich_song_keys")
+        mock_move_songs.side_effect = lambda *a, **kw: call_order.append("move_songs")
+
+        pipeline_orchestrator.main([
+            "--enrich-keys",
+            "--publish-verified",
+            "--date", "2026-09-06"
+        ])
+
+        mock_enrich.assert_called_once()
+        mock_move_songs.assert_called_once()
+
+        kwargs = mock_enrich.call_args[1]
+        self.assertEqual(kwargs.get("directories"), [pipeline_orchestrator.STAGING_AUDIO_DIR])
+        self.assertEqual(call_order, ["enrich_song_keys", "move_songs"])
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
