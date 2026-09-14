@@ -102,8 +102,8 @@ Before running the script, ensure you have the following installed on your machi
    * *macOS (Homebrew):* `brew install ffmpeg`
    * *Linux (Ubuntu/Debian):* `sudo apt update && sudo apt install -y ffmpeg libfontconfig1`
    * *Windows:* Download from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) and add to your system PATH.
-3. **Google Gemini API Key:** Generate one for free from Google AI Studio.
-4. **Planning Center API Keys:** Generate personal access tokens via the PCO developer dashboard.
+3. **Google Gemini API Key:** Generate one for free from Google AI Studio via [https://aistudio.google.com/api-keys](https://aistudio.google.com/api-keys).
+4. **Planning Center API Keys:** Generate personal access tokens via [https://api.planningcenteronline.com/personal_access_tokens](https://api.planningcenteronline.com/personal_access_tokens).
 
 ---
 
