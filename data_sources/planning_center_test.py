@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 import requests
-from core.schemas import ServicePlan, PlanSummary
+from core.schemas import ServicePlan, PlanSummary, ServiceType, Song
 from data_sources.planning_center import (
     fetch_service_plan,
     fetch_recent_plans,
@@ -11,8 +11,10 @@ from data_sources.planning_center import (
     _make_pco_request,
     parse_pco_plan_date,
     parse_pco_date,
+    PlanningCenterProvider,
+    PlanningCenterKeyProvider,
+    fetch_songs_for_date,
 )
-from core.schemas import ServiceType
 
 
 class TestPlanningCenterAPI(unittest.TestCase):
@@ -357,6 +359,64 @@ class TestPlanningCenterAPI(unittest.TestCase):
         self.assertEqual(result, {"data": []})
         self.assertEqual(mock_get.call_count, 2)
         mock_sleep.assert_called_once_with(5)
+
+    @patch("data_sources.planning_center.fetch_service_types")
+    def test_planning_center_provider_resolves_service_types(self, mock_fetch_st) -> None:
+        """Verifies that provider uses explicit service_type_id or falls back to fetch_service_types."""
+        provider_explicit = PlanningCenterProvider(service_type_id="custom_st")
+        self.assertEqual(provider_explicit.get_service_type_ids(), ["custom_st"])
+        mock_fetch_st.assert_not_called()
+
+        mock_fetch_st.return_value = [ServiceType(id="st_1", name="Service 1"), ServiceType(id="st_2", name="Service 2")]
+        with patch.dict(os.environ, {"PCO_SERVICE_TYPE_ID": ""}):
+            provider_auto = PlanningCenterProvider()
+            st_ids = provider_auto.get_service_type_ids()
+            self.assertEqual(st_ids, ["st_1", "st_2"])
+            mock_fetch_st.assert_called_once()
+
+    @patch("data_sources.planning_center.fetch_recent_plans")
+    @patch("data_sources.planning_center.fetch_service_plan")
+    def test_planning_center_provider_get_songs_and_caching(self, mock_fetch_plan, mock_fetch_recent) -> None:
+        """Ensures songs are retrieved from plans matching the date and cached locally."""
+        mock_fetch_recent.return_value = [
+            PlanSummary(id="plan_1", date="2026-09-06"),
+            PlanSummary(id="plan_2", date="2026-09-13"),
+        ]
+        mock_fetch_plan.return_value = ServicePlan(
+            date="2026-09-06",
+            songs=[Song(title="Great Are You Lord", key="G")]
+        )
+
+        provider = PlanningCenterProvider(service_type_id="st_1")
+        songs1 = provider.get_songs_for_date("2026-09-06")
+        self.assertEqual(len(songs1), 1)
+        self.assertEqual(songs1[0].title, "Great Are You Lord")
+        self.assertEqual(songs1[0].key, "G")
+
+        # Second call for the same date must hit in-memory cache
+        songs2 = provider.get_songs_for_date("2026-09-06")
+        self.assertEqual(len(songs2), 1)
+        self.assertEqual(mock_fetch_recent.call_count, 1)
+        self.assertEqual(mock_fetch_plan.call_count, 1)
+
+    @patch("data_sources.planning_center.fetch_recent_plans")
+    @patch("data_sources.planning_center.fetch_service_plan")
+    def test_fetch_songs_for_date_helper(self, mock_fetch_plan, mock_fetch_recent) -> None:
+        """Verifies fetch_songs_for_date helper function."""
+        mock_fetch_recent.return_value = [PlanSummary(id="plan_100", date="2026-09-06")]
+        mock_fetch_plan.return_value = ServicePlan(
+            date="2026-09-06",
+            songs=[Song(title="Living Hope", key="Eb")]
+        )
+
+        songs = fetch_songs_for_date("2026-09-06", service_type_id="st_100")
+        self.assertEqual(len(songs), 1)
+        self.assertEqual(songs[0].title, "Living Hope")
+        self.assertEqual(songs[0].key, "Eb")
+
+    def test_planning_center_key_provider_alias(self) -> None:
+        """Ensures PlanningCenterKeyProvider is an alias to PlanningCenterProvider."""
+        self.assertIs(PlanningCenterKeyProvider, PlanningCenterProvider)
 
 
 if __name__ == "__main__":

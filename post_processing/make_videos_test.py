@@ -147,5 +147,42 @@ class TestMakeVideos(unittest.TestCase):
 
         mock_subprocess.assert_not_called()
 
+    @patch('subprocess.run')
+    def test_make_videos_multiline_title_key_on_separate_line(self, mock_subprocess):
+        mock_result = MagicMock()
+        mock_result.stderr = 'some log text { "input_i": "-20.0", "input_tp": "-2.0", "input_lra": "5.0", "input_thresh": "-30.0", "target_offset": "0.5" } end log'
+        mock_subprocess.return_value = mock_result
+
+        files = [
+            "Amazing Grace - E - 2024-08-04.wav",
+            "Amazing Grace - 2024-08-04.wav",
+            "In Christ Alone - D-E - 2026-09-13.wav",
+            "Build My Life - C# Major - 2026-09-13.wav",
+            "Part 1 - Opening Song - G - 2026-06-21.wav",
+        ]
+        for f in files:
+            self.create_dummy_wav(os.path.join(self.src_dir, f))
+
+        written_texts = {}
+        original_tempfile = tempfile.NamedTemporaryFile
+        def mock_named_tempfile(*args, **kwargs):
+            tf = original_tempfile(*args, **kwargs)
+            orig_write = tf.write
+            def capturing_write(data):
+                written_texts[tf.name] = data
+                return orig_write(data)
+            tf.write = capturing_write
+            return tf
+
+        with patch('post_processing.make_videos.tempfile.NamedTemporaryFile', side_effect=mock_named_tempfile):
+            make_videos(self.src_dir, self.dest_dir, bg_image_path=self.bg_image, ffmpeg_path="ffmpeg")
+
+        all_text_contents = list(written_texts.values())
+        self.assertIn("Amazing Grace\nE\n2024-08-04", all_text_contents)
+        self.assertIn("Amazing Grace\n2024-08-04", all_text_contents)
+        self.assertIn("In Christ Alone\nD-E\n2026-09-13", all_text_contents)
+        self.assertIn("Build My Life\nC# Major\n2026-09-13", all_text_contents)
+        self.assertIn("Part 1 - Opening Song\nG\n2026-06-21", all_text_contents)
+
 if __name__ == '__main__':
     unittest.main()

@@ -2,10 +2,10 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-109%20Passing-brightgreen.svg)](run_tests.py)
+[![Tests](https://img.shields.io/badge/Tests-164%20Passing-brightgreen.svg)](run_tests.py)
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF.svg)](.github/workflows/test.yml)
 
-An end-to-end Python orchestration pipeline for music ministries and churches. This tool automates the tedious process of cataloging live service recordings by integrating directly with Planning Center Online (PCO), using Google Gemini's multimodal AI to intelligently segment raw master audio files, and preparing the final tracks for publication with FFmpeg-powered video generation.
+An end-to-end Python orchestration pipeline for music ministries and churches. This tool automates the tedious process of cataloging live service recordings by integrating directly with Planning Center Online (PCO), using Google Gemini's multimodal AI to intelligently segment raw master audio files, and preparing the final tracks for publication with FFmpeg-powered video and MP3 generation and automatic musical key enrichment.
 
 ## 🚀 Pipeline Features
 
@@ -14,9 +14,11 @@ An end-to-end Python orchestration pipeline for music ministries and churches. T
 3. **Multimodal AI Segmentation:** Leverages the latest Gemini Flash models with a strict "Self-Critique" loop to dynamically listen to the audio, avoid speech-bleed, and map precise timestamps for every song in the setlist.
 4. **Precision FFmpeg Slicing:** Automatically applies 3-second crossfades and cuts the master `.wav` file into pristine, individual tracks.
 5. **DAW Ready:** Generates tab-separated locator markers for seamless import into DAWs like Ableton Live.
-6. **Automated Post-Processing:** 
-   - **Publish:** Strips prefix metadata and safely copies verified tracks to a clean publication folder.
+6. **Automated Post-Processing & Publishing:** 
+   - **Staging & Verification:** Strips AI-generated prefix metadata, safely adds suffix duplicate disambiguation (e.g., `Title (2)`), and stages tracks for human audio review before moving to verified archives.
+   - **Musical Key Enrichment:** Automatically synchronizes with Planning Center Online to enrich song filenames with their musical keys across verified audio, MP3, and video folders, featuring full support for key changes/modulations (e.g., `In Christ Alone - D-E - 2026-09-13.mp4`).
    - **Video Generation:** Generates OLED-safe, multiline typography MP4 videos from your verified audio using a precise 2-pass `loudnorm` audio normalization.
+   - **High-Quality MP3 Generation:** Converts verified audio into normalized MP3s with EBU R128 loudness normalization (`-14 LUFS`), smooth 3-second crossfades, and high-quality LAME variable bitrate encoding (`-q:a 0`).
 
 ---
 
@@ -61,6 +63,7 @@ flowchart TD
         Videos[("Video Archive<br/>VIDEOS_DIR<br/>(*.mp4)")]
         MakeMP3["MP3 Generator (make_mp3.py)<br/>• 2-Pass FFmpeg loudnorm (-14 LUFS) & afade<br/>• High-quality libmp3lame (-q:a 0)"]
         MP3s[("MP3 Archive<br/>MP3_DIR<br/>(*.mp3)")]
+        EnrichKeys["Key Enrichment (enrich_song_keys.py)<br/>• Matches PCO setlist keys<br/>• Supports key modulations (D-E)<br/>• Renames across Verified, MP3s, Videos"]
     end
 
     %% Connections
@@ -84,6 +87,8 @@ flowchart TD
     MakeVideo --> Videos
     Verified --> MakeMP3
     MakeMP3 --> MP3s
+    Verified --> EnrichKeys
+    PCO --> EnrichKeys
 ```
 
 ---
@@ -179,9 +184,9 @@ python3 pipeline_orchestrator.py --audio-file "R_20260906-103109.wav" --publish-
 *Multiple Audio Recordings per Date:*
 When a service date matches multiple raw `.wav` recordings (e.g., split recordings or morning/evening sessions), the orchestrator iterates through all discovered files. Any recording whose destination output folder already exists and is non-empty is safely skipped, allowing the pipeline to continue and process any remaining missing recordings.
 
-### 2. Post-Processing: Publishing & Video Generation
+### 2. Post-Processing: Publishing, Videos, MP3s & Key Enrichment
 
-After the AI segments the audio, you can run post-processing steps individually or combined to stage, verify, and generate videos.
+After the AI segments the audio, you can run post-processing steps individually or combined to stage, verify, enrich with musical keys, and generate videos or MP3s.
 
 **Stage Songs (Date-Scoped):**
 Prompts you to confirm before copying songs from `PROCESSED_AUDIO_DIR` to `STAGING_AUDIO_DIR`. It strips the AI numbering prefix (e.g., `Song_01_`) and safely copies files into your staging area without overwriting existing files.
@@ -256,14 +261,39 @@ Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and converts them into normaliz
   python3 pipeline_orchestrator.py --make-mp3 --all
   ```
 
+**Enrich Song Keys (Planning Center Integration):**
+Scans your `VERIFIED_AUDIO_DIR`, `MP3_DIR`, and `VIDEOS_DIR` (or custom directories) for media files (`.wav`, `.mp3`, `.mp4`), fetches the scheduled songs and musical keys from Planning Center for that service date, and renames files to embed the musical key (e.g., `<Title> - <Key> - <Date>.<ext>`).
+- **Key Modulation Support:** Fully supports both single keys (`E`, `Bm`, `Eb/G`) and key modulations/transitions (e.g., `D-E`, `C-D-E`, `Eb-F`).
+- **Heuristics & Clean Matching:** Uses exact title matching, normalized prefix heuristics, and parenthetical key extraction with automatic skipping for files that already have keys or where target filenames already exist.
+- **Interactive Date Prompt (Default):** Prompts for date filter options (single date, date range, or all songs) if no date arguments are provided.
+- Standalone execution:
+  ```bash
+  python3 pipeline_orchestrator.py --enrich-keys
+  # or directly using the module:
+  python3 -m post_processing.enrich_song_keys
+  ```
+- Scoped to a specific date or date range:
+  ```bash
+  python3 pipeline_orchestrator.py --enrich-keys --date "2026-09-13"
+  python3 pipeline_orchestrator.py --enrich-keys --start-date "2026-09-01" --end-date "2026-09-30"
+  ```
+- Dry-run preview and custom directory targeting via the module:
+  ```bash
+  # Preview renames without modifying files on disk:
+  python3 -m post_processing.enrich_song_keys --dry-run
+  
+  # Target specific directory:
+  python3 -m post_processing.enrich_song_keys --dir "/path/to/media" --date "2026-09-13"
+  ```
+
 **Run Combined Post-Processing Stages:**
 When running multiple post-processing flags together without CLI date args, the orchestrator prompts for the date filter once and applies it across all selected stages:
 ```bash
-# Prompts for dates once, stages songs, asks verification, and renders both videos and MP3s:
-python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos --make-mp3
+# Prompts for dates once, stages songs, asks verification, renders videos and MP3s, and enriches keys:
+python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos --make-mp3 --enrich-keys
 
 # Or process all songs across all stages without date prompting:
-python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos --make-mp3 --all
+python3 pipeline_orchestrator.py --publish-staging --publish-verified --make-videos --make-mp3 --enrich-keys --all
 ```
 
 *(Note: Ensure an image exists at `assets/images/background.png` or specify a custom path in the code for video generation to work.)*
@@ -289,11 +319,11 @@ python3 pipeline_orchestrator_backfill.py
 # Backfill with custom plan limit and automatic staging scoped strictly to the backfill timeframe (inclusive)
 python3 pipeline_orchestrator_backfill.py --start-date "2024-01-01" --end-date "2024-12-31" --limit 200 --publish-staging
 
-# Full end-to-end backfill with staging, verification prompt, and video rendering
-python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging --publish-verified --make-videos
+# Full end-to-end backfill with staging, verification prompt, video/MP3 rendering, and key enrichment
+python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging --publish-verified --make-videos --make-mp3 --enrich-keys
 
-# Run post-processing only for a previous backfill timeframe (skips plan fetching and segmentation)
-python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging --post-processing-only
+# Run post-processing only (including key enrichment) for a previous backfill timeframe (skips plan fetching and segmentation)
+python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging --publish-verified --make-videos --make-mp3 --enrich-keys --post-processing-only
 ```
 
 *Logging Output & Errors to a File:*
@@ -307,15 +337,15 @@ If you ran backfill without `--publish-staging`, you can stage only the files fr
 # Stage only songs from the backfill timeframe:
 python3 pipeline_orchestrator.py --publish-staging --start-date "2026-08-01" --end-date "2026-08-31"
 
-# After listening and verifying in STAGING_AUDIO_DIR, publish and generate videos:
-python3 pipeline_orchestrator.py --publish-verified --make-videos
+# After listening and verifying in STAGING_AUDIO_DIR, publish, enrich keys, and generate videos/MP3s:
+python3 pipeline_orchestrator.py --publish-verified --make-videos --make-mp3 --enrich-keys
 ```
 
 ---
 
 ## 🧪 Testing
 
-The project includes a robust unit testing suite (100+ tests) covering API interactions, timestamp math, string sanitization, hallucination prevention logic, file operations, and dynamic FFmpeg command construction.
+The project includes a robust unit testing suite (164 tests) covering API interactions, timestamp math, string sanitization, hallucination prevention logic, file operations, dynamic FFmpeg command construction, and musical key enrichment.
 
 To run the entire test suite across the repository, use the included test runner:
 ```bash

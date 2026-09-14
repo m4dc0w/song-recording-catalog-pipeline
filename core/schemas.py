@@ -9,9 +9,12 @@ class Song:
         title (str): The name of the song (e.g., "Amazing Grace").
         key (str, optional): The musical key of the song (e.g., "G", "Bm"). 
             Defaults to an empty string.
+        date (Optional[str], optional): The service date associated with the song (e.g., "2026-06-21").
+            Defaults to None.
     """
     title: str
     key: str = ""
+    date: Optional[str] = None
 
 # =============================================================================
 # FUTURE EXTENSIBILITY STUBS

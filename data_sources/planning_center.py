@@ -275,3 +275,73 @@ def fetch_recent_plans(
         params = None # Query params like per_page and offset are embedded in the 'next' URL
         
     return recent_plans
+
+
+# ==============================================================================
+# HIGH-LEVEL PROVIDER & CACHING INTERFACE
+# ==============================================================================
+
+class PlanningCenterProvider:
+    """High-level interface for querying Planning Center with local in-memory caching."""
+
+    def __init__(self, service_type_id: Optional[str] = None):
+        self.service_type_id = service_type_id or os.getenv("PCO_SERVICE_TYPE_ID", "")
+        self._cache: Dict[str, List[Song]] = {}
+        self._service_types: Optional[List[ServiceType]] = None
+
+    def get_service_type_ids(self) -> List[str]:
+        """Resolves target Service Type IDs from configuration or API discovery."""
+        if self.service_type_id:
+            return [self.service_type_id]
+
+        if self._service_types is None:
+            try:
+                self._service_types = fetch_service_types()
+            except Exception as e:
+                print(f"⚠️ Could not fetch service types from Planning Center: {e}")
+                self._service_types = []
+
+        return [st.id for st in self._service_types]
+
+    def get_songs_for_date(self, date_str: str) -> List[Song]:
+        """Retrieves all songs scheduled in Planning Center for a given service date.
+        
+        Results are cached in memory so subsequent lookups for the same service date
+        do not trigger redundant API calls.
+        """
+        if date_str in self._cache:
+            return self._cache[date_str]
+
+        songs_for_date: List[Song] = []
+        st_ids = self.get_service_type_ids()
+
+        for st_id in st_ids:
+            try:
+                plans = fetch_recent_plans(service_type_id=st_id, target_date=date_str)
+                for plan in plans:
+                    if plan.date == date_str:
+                        service_plan = fetch_service_plan(
+                            service_type_id=st_id,
+                            plan_id=plan.id,
+                            service_date=date_str
+                        )
+                        songs_for_date.extend(service_plan.songs)
+            except Exception as e:
+                print(f"⚠️ Error querying Planning Center for date {date_str} (Service Type {st_id}): {e}")
+
+        self._cache[date_str] = songs_for_date
+        return songs_for_date
+
+
+# Alias for backward compatibility and domain-specific naming clarity
+PlanningCenterKeyProvider = PlanningCenterProvider
+
+
+def fetch_songs_for_date(
+    date_str: str,
+    service_type_id: Optional[str] = None,
+    provider: Optional[PlanningCenterProvider] = None
+) -> List[Song]:
+    """Convenience helper to retrieve songs for a specific service date."""
+    p = provider or PlanningCenterProvider(service_type_id=service_type_id)
+    return p.get_songs_for_date(date_str)

@@ -737,5 +737,23 @@ class TestPipelineOrchestrator(unittest.TestCase):
         self.assertEqual(kwargs.get("start_date"), "2026-08-01")
         self.assertEqual(kwargs.get("end_date"), "2026-08-31")
 
+    @patch('pipeline_orchestrator.enrich_song_keys')
+    def test_main_enrich_keys_with_date(self, mock_enrich):
+        pipeline_orchestrator.main(["--enrich-keys", "--date", "2026-09-06"])
+        mock_enrich.assert_called_once()
+        kwargs = mock_enrich.call_args[1]
+        self.assertEqual(kwargs.get("target_date"), "2026-09-06")
+        self.assertIsNone(kwargs.get("start_date"))
+        self.assertIsNone(kwargs.get("end_date"))
+
+    @patch('pipeline_orchestrator.enrich_song_keys')
+    def test_main_enrich_keys_with_date_range(self, mock_enrich):
+        pipeline_orchestrator.main(["--enrich-keys", "--start-date", "2026-08-01", "--end-date", "2026-08-31"])
+        mock_enrich.assert_called_once()
+        kwargs = mock_enrich.call_args[1]
+        self.assertIsNone(kwargs.get("target_date"))
+        self.assertEqual(kwargs.get("start_date"), "2026-08-01")
+        self.assertEqual(kwargs.get("end_date"), "2026-08-31")
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

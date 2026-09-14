@@ -9,6 +9,7 @@ import textwrap
 import wave
 from pathlib import Path
 from typing import Optional
+from core.helpers import filename_to_song
 from post_processing.copy_songs import extract_date_from_file, parse_date_str
 
 def make_videos(
@@ -90,9 +91,17 @@ def make_videos(
         print("=" * 53)
 
         # We need a temp text file for FFmpeg to draw the text, avoiding escaping nightmares
-        # Replace " - " with newlines and auto-wrap long text lines to avoid clipping
-        title_parts = song_title.split(" - ")
-        wrapped_parts = [textwrap.fill(part.strip(), width=32) for part in title_parts if part.strip()]
+        # Support Keys on a separate line (e.g. Title \n Key \n Date) and auto-wrap long lines
+        song_info = filename_to_song(audio_file)
+        if song_info:
+            title_parts = [song_info.title]
+            if song_info.key:
+                title_parts.append(song_info.key)
+            if song_info.date:
+                title_parts.append(song_info.date)
+        else:
+            title_parts = song_title.split(" - ")
+        wrapped_parts = [textwrap.fill(part.strip(), width=32) for part in title_parts if part and part.strip()]
         multiline_title = "\n".join(wrapped_parts)
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as temp_txt:
             temp_txt.write(multiline_title)

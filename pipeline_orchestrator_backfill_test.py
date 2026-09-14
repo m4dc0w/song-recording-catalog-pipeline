@@ -183,5 +183,19 @@ class TestPipelineOrchestratorBackfill(unittest.TestCase):
         self.assertEqual(kwargs.get("start_date"), "2026-08-01")
         self.assertEqual(kwargs.get("end_date"), "2026-08-31")
 
+    @patch('pipeline_orchestrator_backfill.enrich_song_keys')
+    def test_main_backfill_post_processing_only_enrich_keys(self, mock_enrich):
+        pipeline_orchestrator_backfill.main([
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-31",
+            "--enrich-keys",
+            "--post-processing-only"
+        ])
+
+        mock_enrich.assert_called_once()
+        kwargs = mock_enrich.call_args[1]
+        self.assertEqual(kwargs.get("start_date"), "2026-08-01")
+        self.assertEqual(kwargs.get("end_date"), "2026-08-31")
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
