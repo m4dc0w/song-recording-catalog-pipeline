@@ -337,6 +337,30 @@ class TestCoreHelpers(unittest.TestCase):
         self.assertEqual(s4.date, "2026-08-02")
         self.assertEqual(song_to_filename(s4, ext=".mp4"), "10,000 Reasons (Bless The Lord) - D - 2026-08-02.mp4")
 
+        # User example 5: 'Angels We Have Heard On High (1) - E - 2024-11-17.mp4' (unchanged)
+        s5 = filename_to_song("Angels We Have Heard On High (1) - E - 2024-11-17.mp4")
+        self.assertIsNotNone(s5)
+        self.assertEqual(s5.title, "Angels We Have Heard On High (1)")
+        self.assertEqual(s5.key, "E")
+        self.assertEqual(s5.date, "2024-11-17")
+        self.assertEqual(song_to_filename(s5, ext=".mp4"), "Angels We Have Heard On High (1) - E - 2024-11-17.mp4")
+
+        # User example 6: Embedded parenthetical key that does NOT match filename key (unchanged)
+        s6 = filename_to_song("Angels We Have Heard On High (G) - E - 2024-11-17.mp4")
+        self.assertIsNotNone(s6)
+        self.assertEqual(s6.title, "Angels We Have Heard On High (G)")
+        self.assertEqual(s6.key, "E")
+        self.assertEqual(s6.date, "2024-11-17")
+        self.assertEqual(song_to_filename(s6, ext=".mp4"), "Angels We Have Heard On High (G) - E - 2024-11-17.mp4")
+
+        # User example 7: Exact match key with duplicate track suffix
+        s7 = filename_to_song("10,000 Reasons (Bless The Lord) (D) (2) - D - 2026-08-02.mp4")
+        self.assertIsNotNone(s7)
+        self.assertEqual(s7.title, "10,000 Reasons (Bless The Lord) (2)")
+        self.assertEqual(s7.key, "D")
+        self.assertEqual(s7.date, "2026-08-02")
+        self.assertEqual(song_to_filename(s7, ext=".mp4"), "10,000 Reasons (Bless The Lord) (2) - D - 2026-08-02.mp4")
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -89,7 +89,7 @@ def enrich_song_keys(
 
         print(f"\n📂 Scanning directory: {dir_path}")
         files = sorted(os.listdir(dir_path))
-        media_files = [f for f in files if Path(f).suffix.lower() in allowed_exts]
+        media_files = [f for f in files if (dir_path / f).is_file() and Path(f).suffix.lower() in allowed_exts]
 
         if not media_files:
             print(f"  No supported media files found in {dir_path}.")
@@ -97,6 +97,11 @@ def enrich_song_keys(
 
         for filename in media_files:
             old_path = dir_path / filename
+
+            # Ensure we only process files, NOT folders
+            if not old_path.is_file():
+                continue
+
             song = filename_to_song(filename)
 
             if song is None or not song.date:

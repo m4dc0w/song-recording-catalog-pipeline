@@ -388,6 +388,38 @@ class TestEnrichSongKeys(unittest.TestCase):
         renamed_second = enrich_song_keys(self.dir_path, key_provider=mock_provider)
         self.assertEqual(len(renamed_second), 0)
 
+    def test_enrich_song_keys_duplicate_exact_match_and_folders_preserved(self):
+        # 1. File with duplicate exact-match key in title: should be renamed
+        self.create_dummy_file("10,000 Reasons (Bless The Lord) (D) - D - 2026-08-02.mp4")
+        # 2. File with duplicate track index (1) and key E: should remain unchanged
+        self.create_dummy_file("Angels We Have Heard On High (1) - E - 2024-11-17.mp4")
+        # 3. File with non-matching parenthetical key (G) and key E: should remain unchanged
+        self.create_dummy_file("Angels We Have Heard On High (G) - E - 2024-11-17.mp4")
+        # 4. Folder (directory) that looks like a media path: must NOT be renamed
+        folder_path = os.path.join(self.dir_path, "Folder (D) - D - 2026-08-02.mp4")
+        os.makedirs(folder_path, exist_ok=True)
+
+        renamed = enrich_song_keys(self.dir_path, key_provider=None)
+        # Exactly 1 file should be renamed
+        self.assertEqual(len(renamed), 1)
+
+        # 1. 10,000 Reasons was renamed
+        self.assertFalse(os.path.exists(os.path.join(self.dir_path, "10,000 Reasons (Bless The Lord) (D) - D - 2026-08-02.mp4")))
+        self.assertTrue(os.path.exists(os.path.join(self.dir_path, "10,000 Reasons (Bless The Lord) - D - 2026-08-02.mp4")))
+
+        # 2. Angels (1) remains unchanged
+        self.assertTrue(os.path.exists(os.path.join(self.dir_path, "Angels We Have Heard On High (1) - E - 2024-11-17.mp4")))
+
+        # 3. Angels (G) remains unchanged
+        self.assertTrue(os.path.exists(os.path.join(self.dir_path, "Angels We Have Heard On High (G) - E - 2024-11-17.mp4")))
+
+        # 4. Folder was NOT renamed
+        self.assertTrue(os.path.isdir(folder_path))
+
+        # Re-running enrichment should skip all files without renaming
+        renamed_second = enrich_song_keys(self.dir_path, key_provider=None)
+        self.assertEqual(len(renamed_second), 0)
+
     @patch("post_processing.enrich_song_keys.enrich_song_keys")
     def test_main_cli(self, mock_enrich):
         main(["--dir", self.dir_path, "--date", "2024-08-04", "--dry-run"])

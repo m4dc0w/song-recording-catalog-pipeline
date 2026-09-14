@@ -52,20 +52,26 @@ def normalize_song_title(title: str) -> str:
     return re.sub(r'[^a-z0-9]', '', cleaned.lower())
 
 
-def strip_embedded_key_from_title(title: str) -> Tuple[str, str]:
+def strip_embedded_key_from_title(title: str, matching_key: Optional[str] = None) -> Tuple[str, str]:
     """Strips an embedded musical key in parentheses or brackets from the end of a song title,
     while preserving other parenthetical title components (e.g. '(Bless The Lord)', '(Live)', '(Part 1)')
     and duplicate track suffixes (e.g. '(2)').
     
+    If matching_key is provided, ONLY strips the embedded key if it is an exact (case-insensitive,
+    normalized) match to matching_key.
+    
     Examples:
-        - 'Yet Not I But Through Christ In Me (D)'      -> ('Yet Not I But Through Christ In Me', 'D')
-        - '10,000 Reasons (Bless The Lord) (D)'         -> ('10,000 Reasons (Bless The Lord)', 'D')
-        - '10,000 Reasons (Bless The Lord)'             -> ('10,000 Reasons (Bless The Lord)', '')
-        - 'Yet Not I But Through Christ In Me (D) (2)'  -> ('Yet Not I But Through Christ In Me (2)', 'D')
-        - 'Yet Not I But Through Christ In Me (2) (D)'  -> ('Yet Not I But Through Christ In Me (2)', 'D')
-        - 'Amazing Grace'                               -> ('Amazing Grace', '')
-        - 'Build My Life (C# Major)'                    -> ('Build My Life', 'C# Major')
-        - 'In Christ Alone (D-E)'                       -> ('In Christ Alone', 'D-E')
+        - 'Yet Not I But Through Christ In Me (D)'                    -> ('Yet Not I But Through Christ In Me', 'D')
+        - '10,000 Reasons (Bless The Lord) (D)'                       -> ('10,000 Reasons (Bless The Lord)', 'D')
+        - '10,000 Reasons (Bless The Lord)'                           -> ('10,000 Reasons (Bless The Lord)', '')
+        - 'Yet Not I But Through Christ In Me (D) (2)'                -> ('Yet Not I But Through Christ In Me (2)', 'D')
+        - 'Yet Not I But Through Christ In Me (2) (D)'                -> ('Yet Not I But Through Christ In Me (2)', 'D')
+        - 'Amazing Grace'                                             -> ('Amazing Grace', '')
+        - 'Build My Life (C# Major)'                                  -> ('Build My Life', 'C# Major')
+        - 'In Christ Alone (D-E)'                                     -> ('In Christ Alone', 'D-E')
+        - 'Angels We Have Heard On High (1)'                          -> ('Angels We Have Heard On High (1)', '')
+        - strip_embedded_key_from_title('Song (G)', matching_key='E') -> ('Song (G)', '')
+        - strip_embedded_key_from_title('Song (E)', matching_key='E') -> ('Song', 'E')
     """
     if not title or not str(title).strip():
         return ("", "")
@@ -85,10 +91,15 @@ def strip_embedded_key_from_title(title: str) -> Tuple[str, str]:
     if key_match:
         candidate = key_match.group(1).strip()
         if is_valid_musical_key(candidate):
+            norm_cand = normalize_musical_key(candidate)
+            if matching_key is not None:
+                norm_match = normalize_musical_key(matching_key)
+                if norm_cand.upper() != norm_match.upper():
+                    return (raw, "")
             cleaned = title_without_dup[:key_match.start()].strip()
             if dup_suffix:
                 cleaned = f"{cleaned}{dup_suffix}"
-            return (cleaned, normalize_musical_key(candidate))
+            return (cleaned, norm_cand)
 
     return (raw, "")
 
@@ -155,7 +166,7 @@ def filename_to_song(filename: str) -> Optional[Song]:
             candidate_key = parts[1].strip()
             if is_valid_musical_key(candidate_key):
                 raw_title = parts[0].strip()
-                cleaned_title, _ = strip_embedded_key_from_title(raw_title)
+                cleaned_title, _ = strip_embedded_key_from_title(raw_title, matching_key=candidate_key)
                 return Song(title=cleaned_title, key=normalize_musical_key(candidate_key), date=date_str)
 
         cleaned_title, embedded_key = strip_embedded_key_from_title(prefix)
@@ -167,7 +178,7 @@ def filename_to_song(filename: str) -> Optional[Song]:
         candidate_key = parts[1].strip()
         if is_valid_musical_key(candidate_key):
             raw_title = parts[0].strip()
-            cleaned_title, _ = strip_embedded_key_from_title(raw_title)
+            cleaned_title, _ = strip_embedded_key_from_title(raw_title, matching_key=candidate_key)
             return Song(title=cleaned_title, key=normalize_musical_key(candidate_key), date=None)
 
     cleaned_title, embedded_key = strip_embedded_key_from_title(stem)
