@@ -4,7 +4,7 @@ import os
 import re
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from core.schemas import Song
 
 # Regex pattern for recognizing musical keys:
@@ -52,6 +52,47 @@ def normalize_song_title(title: str) -> str:
     return re.sub(r'[^a-z0-9]', '', cleaned.lower())
 
 
+def strip_embedded_key_from_title(title: str) -> Tuple[str, str]:
+    """Strips an embedded musical key in parentheses or brackets from the end of a song title,
+    while preserving other parenthetical title components (e.g. '(Bless The Lord)', '(Live)', '(Part 1)')
+    and duplicate track suffixes (e.g. '(2)').
+    
+    Examples:
+        - 'Yet Not I But Through Christ In Me (D)'      -> ('Yet Not I But Through Christ In Me', 'D')
+        - '10,000 Reasons (Bless The Lord) (D)'         -> ('10,000 Reasons (Bless The Lord)', 'D')
+        - '10,000 Reasons (Bless The Lord)'             -> ('10,000 Reasons (Bless The Lord)', '')
+        - 'Yet Not I But Through Christ In Me (D) (2)'  -> ('Yet Not I But Through Christ In Me (2)', 'D')
+        - 'Yet Not I But Through Christ In Me (2) (D)'  -> ('Yet Not I But Through Christ In Me (2)', 'D')
+        - 'Amazing Grace'                               -> ('Amazing Grace', '')
+        - 'Build My Life (C# Major)'                    -> ('Build My Life', 'C# Major')
+        - 'In Christ Alone (D-E)'                       -> ('In Christ Alone', 'D-E')
+    """
+    if not title or not str(title).strip():
+        return ("", "")
+
+    raw = str(title).strip()
+
+    # Check for duplicate counter suffix at the very end: e.g. ' (2)'
+    dup_match = re.search(r'\s*\((\d+)\)$', raw)
+    dup_suffix = ""
+    title_without_dup = raw
+    if dup_match:
+        dup_suffix = f" ({dup_match.group(1)})"
+        title_without_dup = raw[:dup_match.start()].strip()
+
+    # Look for trailing parenthetical or bracketed candidate at the end of title_without_dup
+    key_match = re.search(r'\s*[\(\[]([^()\[\]]+)[\)\]]$', title_without_dup)
+    if key_match:
+        candidate = key_match.group(1).strip()
+        if is_valid_musical_key(candidate):
+            cleaned = title_without_dup[:key_match.start()].strip()
+            if dup_suffix:
+                cleaned = f"{cleaned}{dup_suffix}"
+            return (cleaned, normalize_musical_key(candidate))
+
+    return (raw, "")
+
+
 def extract_key_from_song(song: Song) -> str:
     """Extracts the musical key from a Song object.
     
@@ -61,7 +102,12 @@ def extract_key_from_song(song: Song) -> str:
     if song.key and song.key.strip():
         return normalize_musical_key(song.key.strip())
     
-    # Check for key in parentheses, e.g., 'Amazing Grace (E)', 'Song (Bm)', 'In Christ Alone (D-E)'
+    # Check if key is embedded in parentheses/brackets in the title
+    _, embedded_key = strip_embedded_key_from_title(song.title)
+    if embedded_key:
+        return embedded_key
+
+    # Fallback search anywhere in parentheses
     m = re.search(
         rf'\(({_SINGLE_KEY_PATTERN}(?:\s*(?:->|–|-)\s*{_SINGLE_KEY_PATTERN})*)\)',
         song.title,
@@ -82,11 +128,11 @@ def filename_to_song(filename: str) -> Optional[Song]:
         - '<Title> - <Key>.<ext>'              -> Song(title='<Title>', key='<Key>', date=None)
         - '<Title>.<ext>'                      -> Song(title='<Title>', key='', date=None)
         
-    Examples:
-        - 'Amazing Grace - 2026-06-21.mp3'             -> Song(title='Amazing Grace', key='', date='2026-06-21')
-        - 'Amazing Grace - E - 2024-08-04.mp3'         -> Song(title='Amazing Grace', key='E', date='2024-08-04')
-        - 'In Christ Alone - D-E - 2026-09-13.mp4'     -> Song(title='In Christ Alone', key='D-E', date='2026-09-13')
-        - 'Amazing Grace (2) - 2026-06-21.wav'         -> Song(title='Amazing Grace (2)', key='', date='2026-06-21')
+    Also automatically normalizes embedded parenthetical keys in titles, e.g.:
+        - 'Yet Not I But Through Christ In Me (D) - 2026-08-02.mp4'     -> Song(title='Yet Not I But Through Christ In Me', key='D', date='2026-08-02')
+        - 'Yet Not I But Through Christ In Me (D) - D - 2026-08-02.mp4' -> Song(title='Yet Not I But Through Christ In Me', key='D', date='2026-08-02')
+        - '10,000 Reasons (Bless The Lord) (D) - 2026-08-02.mp4'         -> Song(title='10,000 Reasons (Bless The Lord)', key='D', date='2026-08-02')
+        - '10,000 Reasons (Bless The Lord) (D) - D - 2026-08-02.mp4'     -> Song(title='10,000 Reasons (Bless The Lord)', key='D', date='2026-08-02')
     """
     if not filename or not str(filename).strip():
         return None
@@ -108,18 +154,24 @@ def filename_to_song(filename: str) -> Optional[Song]:
             parts = prefix.rsplit(" - ", 1)
             candidate_key = parts[1].strip()
             if is_valid_musical_key(candidate_key):
-                return Song(title=parts[0].strip(), key=normalize_musical_key(candidate_key), date=date_str)
+                raw_title = parts[0].strip()
+                cleaned_title, _ = strip_embedded_key_from_title(raw_title)
+                return Song(title=cleaned_title, key=normalize_musical_key(candidate_key), date=date_str)
 
-        return Song(title=prefix, key="", date=date_str)
+        cleaned_title, embedded_key = strip_embedded_key_from_title(prefix)
+        return Song(title=cleaned_title, key=embedded_key, date=date_str)
 
     # If no date suffix, check if stem ends with a key: '<Title> - <Key>'
     if " - " in stem:
         parts = stem.rsplit(" - ", 1)
         candidate_key = parts[1].strip()
         if is_valid_musical_key(candidate_key):
-            return Song(title=parts[0].strip(), key=normalize_musical_key(candidate_key), date=None)
+            raw_title = parts[0].strip()
+            cleaned_title, _ = strip_embedded_key_from_title(raw_title)
+            return Song(title=cleaned_title, key=normalize_musical_key(candidate_key), date=None)
 
-    return Song(title=stem, key="", date=None)
+    cleaned_title, embedded_key = strip_embedded_key_from_title(stem)
+    return Song(title=cleaned_title, key=embedded_key, date=None)
 
 
 def song_to_filename(song: Song, ext: Optional[str] = None) -> str:
@@ -188,7 +240,8 @@ def find_matching_song(target_title: str, candidates: List[Song]) -> Optional[So
     # 3. Stripped parentheticals (e.g. 'Amazing Grace (E)', 'Song (Live)')
     stripped_matches = [
         c for c in candidates 
-        if normalize_song_title(re.sub(r'\s*\(.*?\)', '', c.title)) == norm_base
+        if normalize_song_title(strip_embedded_key_from_title(c.title)[0]) == norm_base
+        or normalize_song_title(re.sub(r'\s*\(.*?\)', '', c.title)) == norm_base
     ]
     if stripped_matches:
         return stripped_matches[dup_index - 1] if len(stripped_matches) >= dup_index else stripped_matches[0]

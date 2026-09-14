@@ -9,6 +9,7 @@ from core.helpers import (
     extract_key_from_song,
     is_valid_musical_key,
     normalize_song_title,
+    strip_embedded_key_from_title,
 )
 
 
@@ -267,6 +268,74 @@ class TestCoreHelpers(unittest.TestCase):
         match = find_matching_song("All Hail King Jesus", candidates)
         self.assertIsNotNone(match)
         self.assertEqual(match.key, "B")
+
+
+    def test_strip_embedded_key_from_title(self):
+        self.assertEqual(
+            strip_embedded_key_from_title("Yet Not I But Through Christ In Me (D)"),
+            ("Yet Not I But Through Christ In Me", "D"),
+        )
+        self.assertEqual(
+            strip_embedded_key_from_title("10,000 Reasons (Bless The Lord) (D)"),
+            ("10,000 Reasons (Bless The Lord)", "D"),
+        )
+        self.assertEqual(
+            strip_embedded_key_from_title("10,000 Reasons (Bless The Lord)"),
+            ("10,000 Reasons (Bless The Lord)", ""),
+        )
+        self.assertEqual(
+            strip_embedded_key_from_title("Yet Not I But Through Christ In Me (D) (2)"),
+            ("Yet Not I But Through Christ In Me (2)", "D"),
+        )
+        self.assertEqual(
+            strip_embedded_key_from_title("Yet Not I But Through Christ In Me (2) (D)"),
+            ("Yet Not I But Through Christ In Me (2)", "D"),
+        )
+        self.assertEqual(
+            strip_embedded_key_from_title("In Christ Alone (D-E)"),
+            ("In Christ Alone", "D-E"),
+        )
+        self.assertEqual(
+            strip_embedded_key_from_title("Build My Life (C# Major)"),
+            ("Build My Life", "C# Major"),
+        )
+        self.assertEqual(
+            strip_embedded_key_from_title("Amazing Grace"),
+            ("Amazing Grace", ""),
+        )
+
+    def test_filename_to_song_embedded_keys_normalization(self):
+        # User example 1: 'Yet Not I But Through Christ In Me (D) - 2026-08-02.mp4'
+        s1 = filename_to_song("Yet Not I But Through Christ In Me (D) - 2026-08-02.mp4")
+        self.assertIsNotNone(s1)
+        self.assertEqual(s1.title, "Yet Not I But Through Christ In Me")
+        self.assertEqual(s1.key, "D")
+        self.assertEqual(s1.date, "2026-08-02")
+        self.assertEqual(song_to_filename(s1, ext=".mp4"), "Yet Not I But Through Christ In Me - D - 2026-08-02.mp4")
+
+        # User example 2: 'Yet Not I But Through Christ In Me (D) - D - 2026-08-02.mp4'
+        s2 = filename_to_song("Yet Not I But Through Christ In Me (D) - D - 2026-08-02.mp4")
+        self.assertIsNotNone(s2)
+        self.assertEqual(s2.title, "Yet Not I But Through Christ In Me")
+        self.assertEqual(s2.key, "D")
+        self.assertEqual(s2.date, "2026-08-02")
+        self.assertEqual(song_to_filename(s2, ext=".mp4"), "Yet Not I But Through Christ In Me - D - 2026-08-02.mp4")
+
+        # User example 3: '10,000 Reasons (Bless The Lord) (D) - 2026-08-02.mp4'
+        s3 = filename_to_song("10,000 Reasons (Bless The Lord) (D) - 2026-08-02.mp4")
+        self.assertIsNotNone(s3)
+        self.assertEqual(s3.title, "10,000 Reasons (Bless The Lord)")
+        self.assertEqual(s3.key, "D")
+        self.assertEqual(s3.date, "2026-08-02")
+        self.assertEqual(song_to_filename(s3, ext=".mp4"), "10,000 Reasons (Bless The Lord) - D - 2026-08-02.mp4")
+
+        # User example 4: '10,000 Reasons (Bless The Lord) (D) - D - 2026-08-02.mp4'
+        s4 = filename_to_song("10,000 Reasons (Bless The Lord) (D) - D - 2026-08-02.mp4")
+        self.assertIsNotNone(s4)
+        self.assertEqual(s4.title, "10,000 Reasons (Bless The Lord)")
+        self.assertEqual(s4.key, "D")
+        self.assertEqual(s4.date, "2026-08-02")
+        self.assertEqual(song_to_filename(s4, ext=".mp4"), "10,000 Reasons (Bless The Lord) - D - 2026-08-02.mp4")
 
 
 if __name__ == '__main__':

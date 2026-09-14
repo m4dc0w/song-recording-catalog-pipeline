@@ -41,6 +41,9 @@ def enrich_song_keys(
     
         '<Title> - <Date>.<ext>' -> '<Title> - <Key> - <Date>.<ext>'
         
+    Also normalizes filenames that have parenthetical keys embedded in their titles
+    (e.g., 'Title (Key) - Date.ext' or 'Title (Key) - Key - Date.ext' -> 'Title - Key - Date.ext').
+        
     Args:
         directories: A directory path or list of directory paths containing media files.
         target_date: Optional specific service date (YYYY-MM-DD) to process.
@@ -109,31 +112,44 @@ def enrich_song_keys(
                 if song_dt is None or not (start_dt.date() <= song_dt.date() <= end_dt.date()):
                     continue
 
-            # Check if key is already present in filename
+            # Check if key is already present in filename and already canonical/normalized
             if song.key:
-                print(f"  ⏭️ Skipping (already has key '{song.key}'): {old_path}")
-                continue
+                canonical_name = song_to_filename(song, ext=old_path.suffix)
+                if (dir_path / canonical_name) == old_path:
+                    print(f"  ⏭️ Skipping (already has key '{song.key}'): {old_path}")
+                    continue
 
-            # Query Planning Center for songs on this date
-            pco_songs = provider.get_songs_for_date(song.date)
-            if not pco_songs:
-                print(f"  ⚠️ No Planning Center songs found for date {song.date}: {old_path}")
-                continue
+            # Query Planning Center if key is not yet known or to verify/enrich from setlist
+            if not song.key:
+                pco_songs = provider.get_songs_for_date(song.date)
+                if not pco_songs:
+                    print(f"  ⚠️ No Planning Center songs found for date {song.date}: {old_path}")
+                    continue
 
-            # Perform exact or heuristic fuzzy match
-            matched_song = find_matching_song(song.title, pco_songs)
-            if not matched_song:
-                print(f"  ❌ No matching song found in Planning Center setlist for '{song.title}' ({song.date}): {old_path}")
-                continue
+                # Perform exact or heuristic fuzzy match
+                matched_song = find_matching_song(song.title, pco_songs)
+                if not matched_song:
+                    print(f"  ❌ No matching song found in Planning Center setlist for '{song.title}' ({song.date}): {old_path}")
+                    continue
 
-            # Extract key from matching song
-            key = extract_key_from_song(matched_song)
-            if not key:
-                print(f"  ⚠️ Match found ('{matched_song.title}'), but no key information recorded in Planning Center for: {old_path}")
-                continue
+                # Extract key from matching song
+                key = extract_key_from_song(matched_song)
+                if not key:
+                    print(f"  ⚠️ Match found ('{matched_song.title}'), but no key information recorded in Planning Center for: {old_path}")
+                    continue
 
-            # Create enriched filename
-            song.key = key
+                song.key = key
+            elif provider:
+                # Key already exists in filename/title, but check if PCO setlist provides key
+                pco_songs = provider.get_songs_for_date(song.date)
+                if pco_songs:
+                    matched_song = find_matching_song(song.title, pco_songs)
+                    if matched_song:
+                        pco_key = extract_key_from_song(matched_song)
+                        if pco_key:
+                            song.key = pco_key
+
+            # Create enriched / normalized filename
             new_filename = song_to_filename(song, ext=old_path.suffix)
             new_path = dir_path / new_filename
 

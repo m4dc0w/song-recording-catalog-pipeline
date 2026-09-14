@@ -338,6 +338,56 @@ class TestEnrichSongKeys(unittest.TestCase):
         self.assertEqual(mock_fetch_recent.call_count, 1)
         self.assertEqual(mock_fetch_plan.call_count, 1)
 
+    def test_enrich_song_keys_embedded_parenthetical_keys_normalization(self):
+        # Test case A: Files with embedded key in title but no key segment in filename
+        self.create_dummy_file("Yet Not I But Through Christ In Me (D) - 2026-08-02.mp4")
+        self.create_dummy_file("10,000 Reasons (Bless The Lord) (D) - 2026-08-02.mp4")
+
+        mock_provider = MockProvider({
+            "2026-08-02": [
+                Song(title="Yet Not I But Through Christ In Me", key="D"),
+                Song(title="10,000 Reasons (Bless The Lord)", key="D"),
+            ]
+        })
+
+        renamed = enrich_song_keys(self.dir_path, key_provider=mock_provider)
+        self.assertEqual(len(renamed), 2)
+
+        self.assertFalse(os.path.exists(os.path.join(self.dir_path, "Yet Not I But Through Christ In Me (D) - 2026-08-02.mp4")))
+        self.assertTrue(os.path.exists(os.path.join(self.dir_path, "Yet Not I But Through Christ In Me - D - 2026-08-02.mp4")))
+
+        self.assertFalse(os.path.exists(os.path.join(self.dir_path, "10,000 Reasons (Bless The Lord) (D) - 2026-08-02.mp4")))
+        self.assertTrue(os.path.exists(os.path.join(self.dir_path, "10,000 Reasons (Bless The Lord) - D - 2026-08-02.mp4")))
+
+        # Running again should skip because they are already normalized
+        renamed_second = enrich_song_keys(self.dir_path, key_provider=mock_provider)
+        self.assertEqual(len(renamed_second), 0)
+
+    def test_enrich_song_keys_duplicate_embedded_and_segment_key_normalization(self):
+        # Test case B: Files that already had - Key - appended but retained embedded (Key) in title
+        self.create_dummy_file("Yet Not I But Through Christ In Me (D) - D - 2026-08-02.mp4")
+        self.create_dummy_file("10,000 Reasons (Bless The Lord) (D) - D - 2026-08-02.mp4")
+
+        mock_provider = MockProvider({
+            "2026-08-02": [
+                Song(title="Yet Not I But Through Christ In Me", key="D"),
+                Song(title="10,000 Reasons (Bless The Lord)", key="D"),
+            ]
+        })
+
+        renamed = enrich_song_keys(self.dir_path, key_provider=mock_provider)
+        self.assertEqual(len(renamed), 2)
+
+        self.assertFalse(os.path.exists(os.path.join(self.dir_path, "Yet Not I But Through Christ In Me (D) - D - 2026-08-02.mp4")))
+        self.assertTrue(os.path.exists(os.path.join(self.dir_path, "Yet Not I But Through Christ In Me - D - 2026-08-02.mp4")))
+
+        self.assertFalse(os.path.exists(os.path.join(self.dir_path, "10,000 Reasons (Bless The Lord) (D) - D - 2026-08-02.mp4")))
+        self.assertTrue(os.path.exists(os.path.join(self.dir_path, "10,000 Reasons (Bless The Lord) - D - 2026-08-02.mp4")))
+
+        # Running again should skip
+        renamed_second = enrich_song_keys(self.dir_path, key_provider=mock_provider)
+        self.assertEqual(len(renamed_second), 0)
+
     @patch("post_processing.enrich_song_keys.enrich_song_keys")
     def test_main_cli(self, mock_enrich):
         main(["--dir", self.dir_path, "--date", "2024-08-04", "--dry-run"])
