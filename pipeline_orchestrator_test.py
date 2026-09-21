@@ -150,11 +150,13 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.discover_raw_audio')
     @patch('pipeline_orchestrator.segment_service_audio')
     @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.enrich_song_keys')
     @patch('pipeline_orchestrator.move_songs')
     @patch('pipeline_orchestrator.make_videos')
+    @patch('pipeline_orchestrator.make_mp3')
     @patch('pipeline_orchestrator.input')
-    def test_main_pipeline_default_zero_args(self, mock_input, mock_make_videos, mock_move_songs, mock_copy_songs, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st):
-        """When args length is zero (e.g. running python3 pipeline_orchestrator.py), it runs segmentation AND post-processing by default."""
+    def test_main_pipeline_default_zero_args(self, mock_input, mock_make_mp3, mock_make_videos, mock_move_songs, mock_enrich_song_keys, mock_copy_songs, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st):
+        """When args length is zero (e.g. running python3 pipeline_orchestrator.py), it runs segmentation AND the entire post-processing suite by default."""
         mock_prompt_st.return_value = "123"
         mock_prompt_plan.return_value = ("456", "2026-09-06")
         
@@ -171,8 +173,10 @@ class TestPipelineOrchestrator(unittest.TestCase):
         mock_discover.assert_called_once()
         mock_segment.assert_called_once_with(mock_plan_obj)
         mock_copy_songs.assert_called_once()
+        mock_enrich_song_keys.assert_called_once()
         mock_move_songs.assert_called_once()
         mock_make_videos.assert_called_once()
+        mock_make_mp3.assert_called_once()
 
     @patch('pipeline_orchestrator.fetch_service_plan')
     @patch('pipeline_orchestrator.discover_raw_audio')
@@ -820,6 +824,48 @@ class TestPipelineOrchestrator(unittest.TestCase):
         kwargs = mock_enrich.call_args[1]
         self.assertEqual(kwargs.get("directories"), [pipeline_orchestrator.STAGING_AUDIO_DIR])
         self.assertEqual(call_order, ["enrich_song_keys", "move_songs"])
+
+    @patch('pipeline_orchestrator.prompt_for_service_type')
+    @patch('pipeline_orchestrator.prompt_for_plan')
+    @patch('pipeline_orchestrator.fetch_service_plan')
+    @patch('pipeline_orchestrator.discover_raw_audio')
+    @patch('pipeline_orchestrator.segment_service_audio')
+    @patch('pipeline_orchestrator.copy_songs')
+    @patch('pipeline_orchestrator.enrich_song_keys')
+    @patch('pipeline_orchestrator.move_songs')
+    @patch('pipeline_orchestrator.make_videos')
+    @patch('pipeline_orchestrator.make_mp3')
+    @patch('pipeline_orchestrator.input', return_value='y')
+    def test_main_pipeline_zero_args_runs_entire_pipeline_in_order(
+        self, mock_input, mock_make_mp3, mock_make_videos, mock_move_songs,
+        mock_enrich, mock_copy_songs, mock_segment, mock_discover,
+        mock_fetch_plan, mock_prompt_plan, mock_prompt_st
+    ):
+        """When args_len is 0, the orchestrator enables all post-processing flags and runs the entire pipeline in order."""
+        mock_prompt_st.return_value = "123"
+        mock_prompt_plan.return_value = ("456", "2026-09-06")
+        mock_fetch_plan.return_value = MagicMock()
+        mock_discover.return_value = ["/path/to/R_20260906-103109.wav"]
+
+        call_order = []
+        mock_segment.side_effect = lambda *a, **kw: call_order.append("segment_service_audio")
+        mock_copy_songs.side_effect = lambda *a, **kw: call_order.append("copy_songs")
+        mock_enrich.side_effect = lambda *a, **kw: call_order.append("enrich_song_keys")
+        mock_move_songs.side_effect = lambda *a, **kw: call_order.append("move_songs")
+        mock_make_videos.side_effect = lambda *a, **kw: call_order.append("make_videos")
+        mock_make_mp3.side_effect = lambda *a, **kw: call_order.append("make_mp3")
+
+        pipeline_orchestrator.main([])
+
+        expected_order = [
+            "segment_service_audio",
+            "copy_songs",
+            "enrich_song_keys",
+            "move_songs",
+            "make_videos",
+            "make_mp3",
+        ]
+        self.assertEqual(call_order, expected_order)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

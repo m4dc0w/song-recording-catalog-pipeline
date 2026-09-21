@@ -361,12 +361,14 @@ def main(cli_args: Optional[List[str]] = None) -> None:
         args_len = len(sys.argv) - 1
 
     # If no CLI arguments were passed (args length is zero), default to running the full
-    # end-to-end pipeline including post-processing (staging, moving to verified, and video generation).
+    # end-to-end pipeline including post-processing (staging, enriching keys, moving to verified, video generation, and MP3 generation).
     has_post_processing_flags = args.publish_staging or args.publish_verified or args.make_videos or args.make_mp3 or args.enrich_keys
     if args_len == 0:
         args.publish_staging = True
+        args.enrich_keys = True
         args.publish_verified = True
         args.make_videos = True
+        args.make_mp3 = True
         run_main_pipeline = True
     else:
         # We only prompt for service type / run the main pipeline if not in standalone post-processing mode
