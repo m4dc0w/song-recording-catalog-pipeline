@@ -124,7 +124,7 @@ class TestMakeCompositeStems(unittest.TestCase):
                 "vocals": "tensor_vocals",
                 "drums": "tensor_drums",
                 "bass": "tensor_bass",
-                "other": "tensor_other_discarded",
+                "other": "tensor_other_ft",
             }
         )
 
@@ -169,13 +169,13 @@ class TestMakeCompositeStems(unittest.TestCase):
         mock_separator_cls.assert_any_call(model="htdemucs_ft", device="mps")
         mock_separator_cls.assert_any_call(model="htdemucs_6s", device="mps")
 
-        # Check that torchaudio.save was called for all 6 stems
-        # Expected stem files: vocal, drums, bass, guitar, piano, other
-        self.assertEqual(mock_audio_save.call_count, 6)
+        # Check that torchaudio.save was called for all 7 stems
+        # Expected stem files: vocal, drums, bass, other_ft, guitar, piano, other
+        self.assertEqual(mock_audio_save.call_count, 7)
         saved_paths = [call_args[0][0] for call_args in mock_audio_save.call_args_list]
 
         song_base = "Amazing Grace - E - 2026-09-06"
-        for stem in ["vocal", "drums", "bass", "guitar", "piano", "other"]:
+        for stem in ["vocal", "drums", "bass", "other_ft", "guitar", "piano", "other"]:
             expected_file = str(expected_folder / f"{song_base} - {stem}.wav")
             self.assertIn(expected_file, saved_paths)
 
@@ -184,7 +184,7 @@ class TestMakeCompositeStems(unittest.TestCase):
     def test_generate_composite_stems_for_file_with_parenthetical_key_normalization(self, mock_separator_cls, mock_audio_save):
         mock_ft = MagicMock()
         mock_ft.samplerate = 44100
-        mock_ft.separate_audio_file.return_value = (None, {"vocals": "v", "drums": "d", "bass": "b"})
+        mock_ft.separate_audio_file.return_value = (None, {"vocals": "v", "drums": "d", "bass": "b", "other": "o_ft"})
         mock_6s = MagicMock()
         mock_6s.samplerate = 44100
         mock_6s.separate_audio_file.return_value = (None, {"guitar": "g", "piano": "p", "other": "o"})
@@ -233,7 +233,7 @@ class TestMakeCompositeStems(unittest.TestCase):
     def test_generate_composite_stems_overwrite_flag(self, mock_separator_cls, mock_save):
         mock_ft_sep = MagicMock()
         mock_ft_sep.samplerate = 44100
-        mock_ft_sep.separate_audio_file.return_value = (None, {"vocals": "v", "drums": "d", "bass": "b"})
+        mock_ft_sep.separate_audio_file.return_value = (None, {"vocals": "v", "drums": "d", "bass": "b", "other": "o_ft"})
         mock_6s_sep = MagicMock()
         mock_6s_sep.samplerate = 44100
         mock_6s_sep.separate_audio_file.return_value = (None, {"guitar": "g", "piano": "p", "other": "o"})
@@ -260,7 +260,7 @@ class TestMakeCompositeStems(unittest.TestCase):
         )
 
         self.assertEqual(mock_separator_cls.call_count, 2)
-        self.assertEqual(mock_save.call_count, 6)
+        self.assertEqual(mock_save.call_count, 7)
 
     def test_make_composite_stems_source_dir_not_found(self):
         res = make_composite_stems(

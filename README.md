@@ -19,7 +19,7 @@ An end-to-end Python orchestration pipeline for music ministries and churches. T
    - **Musical Key Enrichment:** Automatically synchronizes with Planning Center Online to enrich song filenames with their musical keys across verified audio, MP3, and video folders, featuring full support for key changes/modulations (e.g., `In Christ Alone - D-E - 2026-09-13.mp4`).
    - **Video Generation:** Generates OLED-safe, multiline typography MP4 videos from your verified audio using a precise 2-pass `loudnorm` audio normalization.
    - **High-Quality MP3 Generation:** Converts verified audio into normalized MP3s with EBU R128 loudness normalization (`-14 LUFS`), smooth 3-second crossfades, and high-quality LAME variable bitrate encoding (`-q:a 0`).
-   - **Composite Stem Separation:** Isolates 6-track stems (Vocals, Drums, Bass, Guitar, Piano, Other) using hybrid Demucs models (`htdemucs_ft` for rhythm and `htdemucs_6s` for chordal instruments) organized into dedicated per-song stem folders with 16-bit PCM WAV tracks.
+   - **Composite Stem Separation:** Isolates 7-track stems (Vocals, Drums, Bass, Other FT, Guitar, Piano, Other) using hybrid Demucs models (`htdemucs_ft` for rhythm and accompaniment, `htdemucs_6s` for chordal and residual instruments) organized into dedicated per-song stem folders with 16-bit PCM WAV tracks.
 
 ---
 
@@ -65,7 +65,7 @@ flowchart TD
         Videos[("Video Archive<br/>VIDEOS_DIR<br/>(*.mp4)")]
         MakeMP3["MP3 Generator (make_mp3.py)<br/>• 2-Pass FFmpeg loudnorm (-14 LUFS) & afade<br/>• High-quality libmp3lame (-q:a 0)"]
         MP3s[("MP3 Archive<br/>MP3_DIR<br/>(*.mp3)")]
-        MakeStems["Composite Stem Generator (make_composite_stems.py)<br/>• htdemucs_ft: Vocals, Drums, Bass<br/>• htdemucs_6s: Guitar, Piano, Other"]
+        MakeStems["Composite Stem Generator (make_composite_stems.py)<br/>• htdemucs_ft: Vocals, Drums, Bass, Other FT<br/>• htdemucs_6s: Guitar, Piano, Other"]
         Stems[("Stems Archive<br/>STEMS_DIR<br/>{Song} - Stems/*.wav")]
     end
 
@@ -168,7 +168,7 @@ python3 pipeline_orchestrator.py
   8. **Post-Processing (Publish Verified):** Prompts you to confirm moving verified tracks from `STAGING_AUDIO_DIR` to `VERIFIED_AUDIO_DIR`.
   9. **Post-Processing (Generate Videos):** Renders OLED-safe, loudness-normalized MP4 videos into `VIDEOS_DIR`.
   10. **Post-Processing (Generate MP3 Audio):** Converts verified audio into normalized MP3s with EBU R128 loudness normalization and crossfades in `MP3_DIR`.
-  11. **Post-Processing (Generate Composite Stems):** Generates 6-track composite stems (vocals, drums, bass, guitar, piano, other) in `STEMS_DIR`.
+  11. **Post-Processing (Generate Composite Stems):** Generates 7-track composite stems (vocals, drums, bass, other_ft, guitar, piano, other) in `STEMS_DIR`.
 
 *Fine-Grained Controls & Overrides:*
 You can specify a date or date range to run segmentation only (interactively selecting the service type and plan without needing to look up IDs), adjust API query limits, bypass all menus for headless automation, or isolate specific stages:
@@ -276,18 +276,19 @@ Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and converts them into normaliz
   ```
 
 **Generate Composite Stems (Demucs AI):**
-Separates source `.wav` files in `VERIFIED_AUDIO_DIR` into 6-track composite stems using a state-of-the-art dual-model Demucs strategy:
+Separates source `.wav` files in `VERIFIED_AUDIO_DIR` into 7-track composite stems using a state-of-the-art dual-model Demucs strategy:
 - **Model Strategy:**
-  - **`htdemucs_ft` (Fine-Tuned 4-Stem):** Extracts ultra-clean **Vocals**, **Drums**, and **Bass**.
-  - **`htdemucs_6s` (6-Stem):** Extracts **Guitar**, **Piano**, and **Other**.
+  - **`htdemucs_ft` (Fine-Tuned 4-Stem):** Extracts ultra-clean **Vocals**, **Drums**, **Bass**, and the 4-stem harmonic accompaniment **Other (FT)** (`other_ft`).
+  - **`htdemucs_6s` (6-Stem):** Extracts **Guitar**, **Piano**, and isolated residual **Other** (synths, pads, strings, FX).
 - **Output Organization:** Each song creates its own subfolder in `STEMS_DIR` based on its filename (`STEMS_DIR/{input_filename} - Stems`), containing 16-bit PCM `.wav` files:
   - `{input_filename} - vocal.wav`
   - `{input_filename} - drums.wav`
   - `{input_filename} - bass.wav`
+  - `{input_filename} - other_ft.wav` *(composite harmonic/accompaniment bed from 4-stem FT model)*
   - `{input_filename} - guitar.wav`
   - `{input_filename} - piano.wav`
-  - `{input_filename} - other.wav`
-- **Smart Skipping & Memory Management:** Skips separation if all 6 stems already exist (use `--overwrite` to re-generate). Automatically cleans up PyTorch tensors and triggers garbage collection between passes to prevent unified/GPU memory leaks.
+  - `{input_filename} - other.wav` *(isolated residual synths/pads/FX from 6S model)*
+- **Smart Skipping & Memory Management:** Skips separation if all 7 stems already exist (use `--overwrite` to re-generate). Automatically cleans up PyTorch tensors and triggers garbage collection between passes to prevent unified/GPU memory leaks.
 - **Hardware Acceleration:** Auto-detects Apple Silicon (`mps`), NVIDIA CUDA (`cuda`), or falls back to CPU. You can force a specific device via `--device mps` or the `STEMS_DEVICE` environment variable.
 - **Interactive Date Prompt (Default):** Prompts for date filter options (single date, date range, or all songs) if no date arguments are provided.
 - Standalone execution:

@@ -31,6 +31,7 @@ FT_TARGETS: List[Tuple[str, str]] = [
     ("vocals", "vocal"),
     ("drums", "drums"),
     ("bass", "bass"),
+    ("other", "other_ft"),
 ]
 
 # Targets extracted from the 6-stem model (htdemucs_6s)
@@ -41,7 +42,15 @@ SIX_TARGETS: List[Tuple[str, str]] = [
     ("other", "other"),
 ]
 
-ALL_COMPOSITE_STEMS: List[str] = ["vocal", "drums", "bass", "guitar", "piano", "other"]
+ALL_COMPOSITE_STEMS: List[str] = [
+    "vocal",
+    "drums",
+    "bass",
+    "other_ft",
+    "guitar",
+    "piano",
+    "other",
+]
 
 
 def resolve_device(device: Optional[str] = None) -> str:
@@ -210,10 +219,10 @@ def generate_composite_stems_for_file(
     )
 
     # ==========================================
-    # PASS 1: High-Fidelity Rhythm Section (FT)
+    # PASS 1: High-Fidelity Rhythm Section & FT Other
     # ==========================================
     if ft_needed:
-        print("\n  -> Pass 1: Loading htdemucs_ft (Vocals, Drums, Bass)...")
+        print("\n  -> Pass 1: Loading htdemucs_ft (Vocals, Drums, Bass, Other FT)...")
         ft_sep = separator_ft
         created_ft = False
         if ft_sep is None:
@@ -221,7 +230,7 @@ def generate_composite_stems_for_file(
             created_ft = True
 
         sample_rate = getattr(ft_sep, "samplerate", 44100)
-        print("     Extracting Vocals, Drums, and Bass...")
+        print("     Extracting Vocals, Drums, Bass, and Other (FT)...")
         _, separated_ft = ft_sep.separate_audio_file(str(input_path))
 
         for demucs_key, stem_label in FT_TARGETS:
@@ -239,7 +248,7 @@ def generate_composite_stems_for_file(
         del separated_ft
         gc.collect()
     else:
-        print("\n  -> Pass 1 (htdemucs_ft): Rhythm section stems already exist. Skipping.")
+        print("\n  -> Pass 1 (htdemucs_ft): Rhythm section and FT stems already exist. Skipping.")
 
     # ==========================================
     # PASS 2: Chordal Instruments (6S)
@@ -287,7 +296,7 @@ def make_composite_stems(
     end_date: Optional[str] = None,
     overwrite: bool = False
 ) -> List[str]:
-    """Generates composite 6-track stems (Vocals, Drums, Bass, Guitar, Piano, Other)
+    """Generates composite 7-track stems (Vocals, Drums, Bass, Other FT, Guitar, Piano, Other)
     from source .wav files in src_dir (typically VERIFIED_AUDIO_DIR) into dest_dir (STEMS_DIR).
     
     Filters files optionally by target_date (YYYY-MM-DD) or date range (start_date to end_date).
@@ -297,6 +306,7 @@ def make_composite_stems(
         {song_filename} - vocal.wav
         {song_filename} - drums.wav
         {song_filename} - bass.wav
+        {song_filename} - other_ft.wav
         {song_filename} - guitar.wav
         {song_filename} - piano.wav
         {song_filename} - other.wav
