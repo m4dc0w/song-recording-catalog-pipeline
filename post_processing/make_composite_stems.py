@@ -14,6 +14,9 @@ from core.helpers import (
     song_to_stem_filename,
 )
 from post_processing.copy_songs import extract_date_from_file, parse_date_str
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Targets extracted from the fine-tuned 4-stem model (htdemucs_ft)
 # Tuple format: (demucs_key, output_stem_label)
@@ -97,6 +100,64 @@ def check_stem_exists(output_dir: Path, song_name: str | Path | Song, stem_label
     return any(c.exists() for c in candidates)
 
 
+def save_audio_stem(out_file: Path | str, tensor: Any, sample_rate: int = 44100) -> None:
+    """Saves an audio tensor to a 16-bit PCM .wav file.
+    Tries torchaudio.save with PCM_S 16-bit encoding first. If torchaudio fails due to
+    a missing torchcodec backend or TypeError, falls back gracefully to ensure stems
+    can be written even if torchcodec is not installed.
+    """
+    import torchaudio
+
+    try:
+        torchaudio.save(
+            str(out_file),
+            tensor,
+            sample_rate,
+            encoding="PCM_S",
+            bits_per_sample=16,
+        )
+        return
+    except TypeError:
+        try:
+            torchaudio.save(str(out_file), tensor, sample_rate)
+            return
+        except Exception:
+            pass
+    except Exception as e:
+        if "torchcodec" not in str(e).lower() and "save_with_torchcodec" not in str(e).lower():
+            raise
+
+    # Fallback: Save directly via standard library 'wave' module
+    try:
+        import wave
+        import numpy as np
+
+        audio_cpu = tensor.detach().cpu() if hasattr(tensor, "detach") else tensor
+        audio_np = audio_cpu.numpy() if hasattr(audio_cpu, "numpy") else np.asarray(audio_cpu)
+        audio_np = np.clip(audio_np, -1.0, 1.0)
+        int16_data = (audio_np * 32767).astype(np.int16)
+
+        if int16_data.ndim == 2:
+            channels, samples = int16_data.shape
+            if channels <= 8 and samples > channels:
+                int16_data = int16_data.T
+            num_channels = int16_data.shape[1] if int16_data.ndim == 2 else 1
+        else:
+            num_channels = 1
+
+        with wave.open(str(out_file), "wb") as wf:
+            wf.setnchannels(num_channels)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(int16_data.tobytes())
+        return
+    except Exception as fb_err:
+        raise RuntimeError(
+            f"❌ Error saving audio stem to {out_file}: TorchCodec is required for torchaudio.save, "
+            "and fallback failed. Please install torchcodec via: pip install torchcodec"
+        ) from fb_err
+
+
 def generate_composite_stems_for_file(
     input_file: str | Path,
     output_base_dir: str | Path,
@@ -121,7 +182,7 @@ def generate_composite_stems_for_file(
     except ImportError as err:
         raise ImportError(
             f"Required audio stem separation packages are not available: {err}. "
-            "Please install demucs, torchaudio, and torch (e.g. pip install demucs torchaudio torch)."
+            "Please install demucs, torchaudio, torch, numpy, and torchcodec (e.g. pip install demucs torchaudio torch numpy torchcodec)."
         ) from err
 
     input_path = Path(input_file)
@@ -171,16 +232,7 @@ def generate_composite_stems_for_file(
             if demucs_key in separated_ft:
                 out_file = output_dir / f"{song_to_filename(song_obj)} - {stem_label}.wav"
                 if not out_file.exists() or overwrite:
-                    try:
-                        torchaudio.save(
-                            str(out_file), 
-                            separated_ft[demucs_key], 
-                            sample_rate, 
-                            encoding="PCM_S", 
-                            bits_per_sample=16
-                        )
-                    except TypeError:
-                        torchaudio.save(str(out_file), separated_ft[demucs_key], sample_rate)
+                    save_audio_stem(out_file, separated_ft[demucs_key], sample_rate)
                     print(f"     ✅ Saved: {out_file.name} (htdemucs_ft)")
                 else:
                     print(f"     ⏩ Skipped (already exists): {out_file.name}")
@@ -212,16 +264,7 @@ def generate_composite_stems_for_file(
             if demucs_key in separated_6s:
                 out_file = output_dir / f"{song_to_filename(song_obj)} - {stem_label}.wav"
                 if not out_file.exists() or overwrite:
-                    try:
-                        torchaudio.save(
-                            str(out_file), 
-                            separated_6s[demucs_key], 
-                            sample_rate, 
-                            encoding="PCM_S", 
-                            bits_per_sample=16
-                        )
-                    except TypeError:
-                        torchaudio.save(str(out_file), separated_6s[demucs_key], sample_rate)
+                    save_audio_stem(out_file, separated_6s[demucs_key], sample_rate)
                     print(f"     ✅ Saved: {out_file.name} (htdemucs_6s)")
                 else:
                     print(f"     ⏩ Skipped (already exists): {out_file.name}")
@@ -271,7 +314,7 @@ def make_composite_stems(
         import torchaudio
     except ImportError as err:
         print(f"❌ Error: Demucs or PyTorch is not installed ({err}).")
-        print("Please install Demucs and PyTorch: pip install demucs torchaudio torch")
+        print("Please install Demucs and PyTorch: pip install demucs torchaudio torch numpy torchcodec")
         return []
 
     os.makedirs(dest_dir, exist_ok=True)

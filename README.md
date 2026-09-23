@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-196%20Passing-brightgreen.svg)](run_tests.py)
+[![Tests](https://img.shields.io/badge/Tests-202%20Passing-brightgreen.svg)](run_tests.py)
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF.svg)](.github/workflows/test.yml)
 
 An end-to-end Python orchestration pipeline for music ministries and churches. This tool automates the tedious process of cataloging live service recordings by integrating directly with Planning Center Online (PCO), using Google Gemini's multimodal AI to intelligently segment raw master audio files, and preparing the final tracks for publication with FFmpeg-powered video and MP3 generation, Demucs hybrid composite stem separation, and automatic musical key enrichment.
@@ -109,9 +109,10 @@ Before running the script, ensure you have the following installed on your machi
    * *Windows:* Download from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) and add to your system PATH.
 3. **PyTorch & Demucs (Optional / For Stem Separation):** For composite stem extraction:
    ```bash
-   pip install demucs torchaudio torch
+   pip install demucs torchaudio torch numpy torchcodec
    ```
-   *Hardware Acceleration:* Automatically utilizes Apple Silicon MPS (`mps`), NVIDIA CUDA (`cuda`), or CPU.
+   *Hardware Acceleration:* Automatically utilizes Apple Silicon MPS (`mps`), NVIDIA CUDA (`cuda`), or CPU.  
+   *(Tip: For multi-machine deployments or offline environments, see the [Hugging Face & PyTorch Model Cache Guide](#-hugging-face--pytorch-model-cache-management-offline--multi-machine-setup) below).*
 4. **Google Gemini API Key:** Generate one for free from Google AI Studio via [https://aistudio.google.com/api-keys](https://aistudio.google.com/api-keys).
 5. **Planning Center API Keys:** Generate personal access tokens via [https://api.planningcenteronline.com/personal_access_tokens](https://api.planningcenteronline.com/personal_access_tokens).
 
@@ -304,6 +305,99 @@ Separates source `.wav` files in `VERIFIED_AUDIO_DIR` into 6-track composite ste
   ```bash
   python3 -m post_processing.make_composite_stems --src-dir "/path/to/wavs" --dest-dir "/path/to/stems" --device mps --overwrite
   ```
+
+#### 💾 Hugging Face & PyTorch Model Cache Management (Offline & Multi-Machine Setup)
+
+When Demucs runs for the first time, it downloads pretrained neural network weights (`htdemucs_ft` and `htdemucs_6s`, ~300 MB to 1+ GB each) to your local cache. Depending on the Demucs release and PyTorch backend, these weights are stored in:
+- **Hugging Face Hub Cache:** `~/.cache/huggingface/hub/`
+- **PyTorch Hub Checkpoints:** `~/.cache/torch/hub/checkpoints/`
+
+Pre-caching and copying this cache between machines is essential when:
+- Deploying to headless Linux servers, cloud instances, or church production machines.
+- Running in air-gapped venues or offline studios with limited or no internet access.
+- Avoiding redundant multi-gigabyte downloads across team members or build environments.
+
+##### 1. Locating the Cached Files
+On your primary machine where Demucs has previously separated audio:
+```bash
+# Verify Hugging Face model cache (contains model snapshots and blobs)
+ls -la ~/.cache/huggingface/hub/
+
+# Verify PyTorch Hub checkpoints (contains pretrained .th and .pt files)
+ls -la ~/.cache/torch/hub/checkpoints/
+```
+
+##### 2. Copying the Cache to Another Machine or Server
+
+**Option A: Using `rsync` (Fastest & Recommended for SSH/Remote Hosts)**
+```bash
+# 1. Create target directories on the remote host
+ssh user@remote-host "mkdir -p ~/.cache/huggingface ~/.cache/torch/hub/checkpoints"
+
+# 2. Sync the Hugging Face cache (preserves directory structure and symlinks)
+rsync -avzP ~/.cache/huggingface/ user@remote-host:~/.cache/huggingface/
+
+# 3. Sync the PyTorch Hub checkpoints
+rsync -avzP ~/.cache/torch/hub/checkpoints/ user@remote-host:~/.cache/torch/hub/checkpoints/
+```
+
+**Option B: Using Compressed Tarball (Ideal for USB drives, Cloud storage, or Air-gapped transfers)**
+```bash
+# On the source machine, create compressed archives:
+tar -czvf hf_cache.tar.gz -C ~/.cache huggingface
+tar -czvf torch_cache.tar.gz -C ~/.cache/torch hub
+
+# On the destination machine, extract into ~/.cache:
+mkdir -p ~/.cache ~/.cache/torch
+tar -xzvf hf_cache.tar.gz -C ~/.cache/
+tar -xzvf torch_cache.tar.gz -C ~/.cache/torch/
+```
+
+**Option C: In Docker Containers & Headless Deployments**
+In your `Dockerfile`:
+```dockerfile
+# Copy pre-downloaded cache into the container image
+COPY .cache/huggingface /root/.cache/huggingface
+COPY .cache/torch /root/.cache/torch
+```
+Or mount your host cache dynamically at container runtime:
+```bash
+docker run -v ~/.cache/huggingface:/root/.cache/huggingface \
+           -v ~/.cache/torch:/root/.cache/torch ...
+```
+
+##### 3. Configuring Demucs to Utilize the Cache
+
+If the cache files are copied into the standard `~/.cache/huggingface` and `~/.cache/torch` locations on the destination machine, Demucs and PyTorch will detect and use them **automatically with zero configuration needed**.
+
+If you copied the cache to a **custom directory** (e.g. an external SSD `/Volumes/FastDrive/cache` or shared network mount `/mnt/shared/models`), configure the paths via environment variables:
+
+**In your shell (`~/.bashrc`, `~/.zshrc`) or terminal session:**
+```bash
+# Point Hugging Face to your custom directory
+export HF_HOME="/path/to/custom/cache/huggingface"
+export HF_HUB_CACHE="/path/to/custom/cache/huggingface/hub"
+
+# Point PyTorch Hub to your custom directory
+export TORCH_HOME="/path/to/custom/cache/torch"
+```
+
+**Or in your project's `.env` file:**
+```bash
+HF_HOME=/path/to/custom/cache/huggingface
+HF_HUB_CACHE=/path/to/custom/cache/huggingface/hub
+TORCH_HOME=/path/to/custom/cache/torch
+```
+
+##### 4. Enforcing Strictly Offline / Air-Gapped Operation
+
+To guarantee that Demucs, Hugging Face, or PyTorch never attempt outbound HTTP network calls or repository check lookups (ideal for air-gapped church production computers), enable offline mode:
+
+```bash
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+```
+*(You can also set `HF_HUB_OFFLINE=1` in your `.env` file).* When enabled, Demucs operates 100% locally from your transferred cache and will never reach out to remote servers.
 
 **Enrich Song Keys (Planning Center Integration):**
 Enriches song tracks with their musical keys from Planning Center (e.g., `<Title> - <Key> - <Date>.<ext>`).

@@ -11,6 +11,7 @@ from post_processing.make_composite_stems import (
     resolve_device,
     resolve_song,
     check_stem_exists,
+    save_audio_stem,
     generate_composite_stems_for_file,
     make_composite_stems,
     main,
@@ -267,6 +268,86 @@ class TestMakeCompositeStems(unittest.TestCase):
             dest_dir=self.dest_dir
         )
         self.assertEqual(res, [])
+
+    def test_make_composite_stems_missing_numpy_dependency(self):
+        orig_import = __import__
+
+        def custom_import(name, *args, **kwargs):
+            if name.startswith("demucs"):
+                raise ImportError("No module named 'numpy'")
+            return orig_import(name, *args, **kwargs)
+
+        with patch('builtins.__import__', side_effect=custom_import):
+            with patch('builtins.print') as mock_print:
+                res = make_composite_stems(src_dir=self.src_dir, dest_dir=self.dest_dir)
+                self.assertEqual(res, [])
+                printed = " ".join(str(call_args[0][0]) for call_args in mock_print.call_args_list if call_args[0])
+                self.assertIn("No module named 'numpy'", printed)
+                self.assertIn("pip install demucs torchaudio torch numpy torchcodec", printed)
+
+    def test_generate_composite_stems_for_file_missing_numpy_dependency(self):
+        orig_import = __import__
+
+        def custom_import(name, *args, **kwargs):
+            if name.startswith("demucs"):
+                raise ImportError("No module named 'numpy'")
+            return orig_import(name, *args, **kwargs)
+
+        input_wav = os.path.join(self.src_dir, "Song.wav")
+        Path(input_wav).touch()
+
+        with patch('builtins.__import__', side_effect=custom_import):
+            with self.assertRaises(ImportError) as ctx:
+                generate_composite_stems_for_file(input_file=input_wav, output_base_dir=self.dest_dir)
+            self.assertIn("No module named 'numpy'", str(ctx.exception))
+            self.assertIn("numpy", str(ctx.exception))
+            self.assertIn("torchcodec", str(ctx.exception))
+
+    @patch('torchaudio.save')
+    def test_save_audio_stem_success(self, mock_torchaudio_save):
+        out_file = Path(self.dest_dir) / "test.wav"
+        mock_tensor = MagicMock()
+        save_audio_stem(out_file, mock_tensor, sample_rate=44100)
+        mock_torchaudio_save.assert_called_once_with(
+            str(out_file),
+            mock_tensor,
+            44100,
+            encoding="PCM_S",
+            bits_per_sample=16,
+        )
+
+    @patch('torchaudio.save')
+    def test_save_audio_stem_type_error_fallback(self, mock_torchaudio_save):
+        # Simulate older torchaudio version that does not support encoding/bits_per_sample
+        out_file = Path(self.dest_dir) / "test_legacy.wav"
+        mock_tensor = MagicMock()
+        mock_torchaudio_save.side_effect = [TypeError("Unexpected kwarg 'encoding'"), None]
+        save_audio_stem(out_file, mock_tensor, sample_rate=48000)
+        self.assertEqual(mock_torchaudio_save.call_count, 2)
+        mock_torchaudio_save.assert_called_with(str(out_file), mock_tensor, 48000)
+
+    @patch('torchaudio.save')
+    def test_save_audio_stem_torchcodec_fallback_failure_raises_clear_error(self, mock_torchaudio_save):
+        out_file = Path(self.dest_dir) / "test_torchcodec.wav"
+        mock_tensor = MagicMock()
+        mock_torchaudio_save.side_effect = RuntimeError(
+            "TorchCodec is required for save_with_torchcodec. Please install torchcodec to use this function."
+        )
+
+        with self.assertRaises(RuntimeError) as ctx:
+            save_audio_stem(out_file, mock_tensor, sample_rate=44100)
+        self.assertIn("TorchCodec is required", str(ctx.exception))
+        self.assertIn("pip install torchcodec", str(ctx.exception))
+
+    @patch('torchaudio.save')
+    def test_save_audio_stem_generic_error_re_raised(self, mock_torchaudio_save):
+        out_file = Path(self.dest_dir) / "test_ioerr.wav"
+        mock_tensor = MagicMock()
+        mock_torchaudio_save.side_effect = OSError("Disk full")
+
+        with self.assertRaises(OSError) as ctx:
+            save_audio_stem(out_file, mock_tensor, sample_rate=44100)
+        self.assertIn("Disk full", str(ctx.exception))
 
     def test_make_composite_stems_no_wav_files(self):
         res = make_composite_stems(
