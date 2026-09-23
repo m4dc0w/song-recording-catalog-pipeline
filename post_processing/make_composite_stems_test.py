@@ -308,23 +308,12 @@ class TestMakeCompositeStems(unittest.TestCase):
         out_file = Path(self.dest_dir) / "test.wav"
         mock_tensor = MagicMock()
         save_audio_stem(out_file, mock_tensor, sample_rate=44100)
+        # Natively calls torchaudio.save without unsupported encoding/bits_per_sample kwargs
         mock_torchaudio_save.assert_called_once_with(
             str(out_file),
             mock_tensor,
             44100,
-            encoding="PCM_S",
-            bits_per_sample=16,
         )
-
-    @patch('torchaudio.save')
-    def test_save_audio_stem_type_error_fallback(self, mock_torchaudio_save):
-        # Simulate older torchaudio version that does not support encoding/bits_per_sample
-        out_file = Path(self.dest_dir) / "test_legacy.wav"
-        mock_tensor = MagicMock()
-        mock_torchaudio_save.side_effect = [TypeError("Unexpected kwarg 'encoding'"), None]
-        save_audio_stem(out_file, mock_tensor, sample_rate=48000)
-        self.assertEqual(mock_torchaudio_save.call_count, 2)
-        mock_torchaudio_save.assert_called_with(str(out_file), mock_tensor, 48000)
 
     @patch('torchaudio.save')
     def test_save_audio_stem_torchcodec_fallback_failure_raises_clear_error(self, mock_torchaudio_save):
@@ -348,6 +337,19 @@ class TestMakeCompositeStems(unittest.TestCase):
         with self.assertRaises(OSError) as ctx:
             save_audio_stem(out_file, mock_tensor, sample_rate=44100)
         self.assertIn("Disk full", str(ctx.exception))
+
+    @patch('torchaudio.save')
+    def test_save_audio_stem_native_call_no_unsupported_kwargs(self, mock_torchaudio_save):
+        out_file = Path(self.dest_dir) / "test_native.wav"
+        mock_tensor = MagicMock()
+
+        save_audio_stem(out_file, mock_tensor, sample_rate=44100)
+
+        # Confirm torchaudio.save was invoked natively with no unsupported kwargs
+        mock_torchaudio_save.assert_called_once_with(str(out_file), mock_tensor, 44100)
+        _, call_kwargs = mock_torchaudio_save.call_args
+        self.assertNotIn("encoding", call_kwargs)
+        self.assertNotIn("bits_per_sample", call_kwargs)
 
     def test_make_composite_stems_no_wav_files(self):
         res = make_composite_stems(

@@ -4,6 +4,7 @@ import os
 import gc
 import sys
 import argparse
+import warnings
 from pathlib import Path
 from typing import Optional, List, Tuple, Any
 
@@ -17,6 +18,12 @@ from post_processing.copy_songs import extract_date_from_file, parse_date_str
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Suppress TorchCodec UserWarnings regarding 'encoding' and 'bits_per_sample' parameters,
+# which are handled automatically by TorchCodec AudioEncoder based on the .wav extension.
+warnings.filterwarnings("ignore", category=UserWarning, message=r".*TorchCodec.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=r".*encoding.*parameter is not fully supported.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=r".*bits_per_sample.*parameter is not directly supported.*")
 
 # Targets extracted from the fine-tuned 4-stem model (htdemucs_ft)
 # Tuple format: (demucs_key, output_stem_label)
@@ -101,28 +108,17 @@ def check_stem_exists(output_dir: Path, song_name: str | Path | Song, stem_label
 
 
 def save_audio_stem(out_file: Path | str, tensor: Any, sample_rate: int = 44100) -> None:
-    """Saves an audio tensor to a 16-bit PCM .wav file.
-    Tries torchaudio.save with PCM_S 16-bit encoding first. If torchaudio fails due to
-    a missing torchcodec backend or TypeError, falls back gracefully to ensure stems
-    can be written even if torchcodec is not installed.
+    """Saves an audio tensor to a .wav file natively.
+    Calls torchaudio.save(out_file, tensor, sample_rate) without unsupported encoding
+    parameters, allowing the backend (such as TorchCodec) to automatically infer
+    audio format and encoding settings from the tensor dtype and .wav file extension.
+    If torchaudio/torchcodec is unavailable, falls back to the standard library wave module.
     """
     import torchaudio
 
     try:
-        torchaudio.save(
-            str(out_file),
-            tensor,
-            sample_rate,
-            encoding="PCM_S",
-            bits_per_sample=16,
-        )
+        torchaudio.save(str(out_file), tensor, sample_rate)
         return
-    except TypeError:
-        try:
-            torchaudio.save(str(out_file), tensor, sample_rate)
-            return
-        except Exception:
-            pass
     except Exception as e:
         if "torchcodec" not in str(e).lower() and "save_with_torchcodec" not in str(e).lower():
             raise
