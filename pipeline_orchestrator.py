@@ -19,6 +19,7 @@ from post_processing.copy_songs import copy_songs
 from post_processing.move_songs import move_songs
 from post_processing.make_videos import make_videos
 from post_processing.make_mp3 import make_mp3
+from post_processing.make_composite_stems import make_composite_stems
 from post_processing.enrich_song_keys import enrich_song_keys
 
 # Load environment variables
@@ -31,6 +32,7 @@ STAGING_AUDIO_DIR: str = os.getenv("STAGING_AUDIO_DIR", os.path.join(os.getcwd()
 VERIFIED_AUDIO_DIR: str = os.getenv("VERIFIED_AUDIO_DIR", os.path.join(os.getcwd(), "verified_audio"))
 VIDEOS_DIR: str = os.getenv("VIDEOS_DIR", os.path.join(VERIFIED_AUDIO_DIR, "Videos"))
 MP3_DIR: str = os.getenv("MP3_DIR", os.path.join(VERIFIED_AUDIO_DIR, "MP3"))
+STEMS_DIR: str = os.getenv("STEMS_DIR", os.path.join(VERIFIED_AUDIO_DIR, "Stems"))
 DEFAULT_SERVICE_TYPE: str = os.getenv("PCO_SERVICE_TYPE_ID", "")
 FFMPEG_PATH: str = os.getenv("FFMPEG_PATH", "ffmpeg")
 
@@ -343,6 +345,11 @@ def main(cli_args: Optional[List[str]] = None) -> None:
         help="Run post-processing to generate high-quality MP3 audio files from the verified recordings (prompts for dates if omitted)."
     )
     parser.add_argument(
+        "--make-stems",
+        action="store_true",
+        help="Run post-processing to generate composite stems (vocals, drums, bass, guitar, piano, other) using Demucs from the verified recordings (prompts for dates if omitted)."
+    )
+    parser.add_argument(
         "--enrich-keys",
         action="store_true",
         help="Run post-processing to enrich song filenames with musical keys from Planning Center (enriches staging directory before publishing, or verified audio, MP3, and Video directories during manual runs)."
@@ -350,7 +357,7 @@ def main(cli_args: Optional[List[str]] = None) -> None:
     parser.add_argument(
         "--skip-post-processing",
         action="store_true",
-        help="Skip post-processing (publishing, video, and MP3 generation) when running the interactive pipeline."
+        help="Skip post-processing (publishing, video, MP3, and stem generation) when running the interactive pipeline."
     )
     
     if cli_args is not None:
@@ -361,14 +368,15 @@ def main(cli_args: Optional[List[str]] = None) -> None:
         args_len = len(sys.argv) - 1
 
     # If no CLI arguments were passed (args length is zero), default to running the full
-    # end-to-end pipeline including post-processing (staging, enriching keys, moving to verified, video generation, and MP3 generation).
-    has_post_processing_flags = args.publish_staging or args.publish_verified or args.make_videos or args.make_mp3 or args.enrich_keys
+    # end-to-end pipeline including post-processing (staging, enriching keys, moving to verified, video generation, MP3 generation, and stem generation).
+    has_post_processing_flags = args.publish_staging or args.publish_verified or args.make_videos or args.make_mp3 or args.enrich_keys or args.make_stems
     if args_len == 0:
         args.publish_staging = True
         args.enrich_keys = True
         args.publish_verified = True
         args.make_videos = True
         args.make_mp3 = True
+        args.make_stems = True
         run_main_pipeline = True
     else:
         # We only prompt for service type / run the main pipeline if not in standalone post-processing mode
@@ -645,6 +653,25 @@ def main(cli_args: Optional[List[str]] = None) -> None:
                 VERIFIED_AUDIO_DIR, 
                 MP3_DIR, 
                 ffmpeg_path=FFMPEG_PATH,
+                target_date=p_target,
+                start_date=p_start,
+                end_date=p_end
+            )
+
+        # 10. Post-Processing: Generate Composite Stems
+        if args.make_stems:
+            print("\n" + "=" * 50)
+            print("🎛️ Post-Processing: Generating Composite Stems")
+            print("=" * 50)
+            
+            p_target, p_start, p_end = resolve_post_proc_dates(
+                title="Date Filter for Composite Stem Generation",
+                all_label="generate stems for all songs"
+            )
+
+            make_composite_stems(
+                VERIFIED_AUDIO_DIR, 
+                STEMS_DIR, 
                 target_date=p_target,
                 start_date=p_start,
                 end_date=p_end

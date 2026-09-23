@@ -230,5 +230,31 @@ class TestPipelineOrchestratorBackfill(unittest.TestCase):
         kwargs = mock_enrich.call_args[1]
         self.assertEqual(kwargs.get("directories"), [pipeline_orchestrator_backfill.STAGING_AUDIO_DIR])
 
+    @patch('pipeline_orchestrator_backfill.make_composite_stems')
+    def test_main_backfill_post_processing_only_make_stems(self, mock_make_stems):
+        pipeline_orchestrator_backfill.main([
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-31",
+            "--make-stems",
+            "--post-processing-only"
+        ])
+
+        mock_make_stems.assert_called_once()
+        kwargs = mock_make_stems.call_args[1]
+        self.assertEqual(kwargs.get("start_date"), "2026-08-01")
+        self.assertEqual(kwargs.get("end_date"), "2026-08-31")
+
+    @patch('pipeline_orchestrator_backfill.make_composite_stems')
+    def test_main_backfill_skip_post_processing_ignores_make_stems(self, mock_make_stems):
+        pipeline_orchestrator_backfill.main([
+            "--start-date", "2026-08-01",
+            "--end-date", "2026-08-31",
+            "--make-stems",
+            "--skip-post-processing",
+            "--post-processing-only"
+        ])
+
+        mock_make_stems.assert_not_called()
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

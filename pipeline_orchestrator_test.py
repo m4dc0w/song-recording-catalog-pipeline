@@ -154,8 +154,9 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.move_songs')
     @patch('pipeline_orchestrator.make_videos')
     @patch('pipeline_orchestrator.make_mp3')
+    @patch('pipeline_orchestrator.make_composite_stems')
     @patch('pipeline_orchestrator.input')
-    def test_main_pipeline_default_zero_args(self, mock_input, mock_make_mp3, mock_make_videos, mock_move_songs, mock_enrich_song_keys, mock_copy_songs, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st):
+    def test_main_pipeline_default_zero_args(self, mock_input, mock_make_stems, mock_make_mp3, mock_make_videos, mock_move_songs, mock_enrich_song_keys, mock_copy_songs, mock_segment, mock_discover, mock_fetch_plan, mock_prompt_plan, mock_prompt_st):
         """When args length is zero (e.g. running python3 pipeline_orchestrator.py), it runs segmentation AND the entire post-processing suite by default."""
         mock_prompt_st.return_value = "123"
         mock_prompt_plan.return_value = ("456", "2026-09-06")
@@ -177,6 +178,7 @@ class TestPipelineOrchestrator(unittest.TestCase):
         mock_move_songs.assert_called_once()
         mock_make_videos.assert_called_once()
         mock_make_mp3.assert_called_once()
+        mock_make_stems.assert_called_once()
 
     @patch('pipeline_orchestrator.fetch_service_plan')
     @patch('pipeline_orchestrator.discover_raw_audio')
@@ -835,9 +837,10 @@ class TestPipelineOrchestrator(unittest.TestCase):
     @patch('pipeline_orchestrator.move_songs')
     @patch('pipeline_orchestrator.make_videos')
     @patch('pipeline_orchestrator.make_mp3')
+    @patch('pipeline_orchestrator.make_composite_stems')
     @patch('pipeline_orchestrator.input', return_value='y')
     def test_main_pipeline_zero_args_runs_entire_pipeline_in_order(
-        self, mock_input, mock_make_mp3, mock_make_videos, mock_move_songs,
+        self, mock_input, mock_make_stems, mock_make_mp3, mock_make_videos, mock_move_songs,
         mock_enrich, mock_copy_songs, mock_segment, mock_discover,
         mock_fetch_plan, mock_prompt_plan, mock_prompt_st
     ):
@@ -854,6 +857,7 @@ class TestPipelineOrchestrator(unittest.TestCase):
         mock_move_songs.side_effect = lambda *a, **kw: call_order.append("move_songs")
         mock_make_videos.side_effect = lambda *a, **kw: call_order.append("make_videos")
         mock_make_mp3.side_effect = lambda *a, **kw: call_order.append("make_mp3")
+        mock_make_stems.side_effect = lambda *a, **kw: call_order.append("make_composite_stems")
 
         pipeline_orchestrator.main([])
 
@@ -864,8 +868,54 @@ class TestPipelineOrchestrator(unittest.TestCase):
             "move_songs",
             "make_videos",
             "make_mp3",
+            "make_composite_stems",
         ]
         self.assertEqual(call_order, expected_order)
+
+    @patch('pipeline_orchestrator.make_composite_stems')
+    def test_make_stems_flag_with_date(self, mock_make_stems):
+        """When --make-stems and --date are passed, make_composite_stems is called with the resolved date."""
+        pipeline_orchestrator.main(["--make-stems", "--date", "2026-09-06"])
+        mock_make_stems.assert_called_once_with(
+            pipeline_orchestrator.VERIFIED_AUDIO_DIR,
+            pipeline_orchestrator.STEMS_DIR,
+            target_date="2026-09-06",
+            start_date=None,
+            end_date=None
+        )
+
+    @patch('pipeline_orchestrator.make_composite_stems')
+    def test_make_stems_flag_with_date_range(self, mock_make_stems):
+        """When --make-stems and date range are passed, make_composite_stems is called with the date range."""
+        pipeline_orchestrator.main([
+            "--make-stems",
+            "--start-date", "2026-09-01",
+            "--end-date", "2026-09-30"
+        ])
+        mock_make_stems.assert_called_once_with(
+            pipeline_orchestrator.VERIFIED_AUDIO_DIR,
+            pipeline_orchestrator.STEMS_DIR,
+            target_date=None,
+            start_date="2026-09-01",
+            end_date="2026-09-30"
+        )
+
+    @patch('pipeline_orchestrator.prompt_for_date_filter', return_value=("2026-09-06", None, None))
+    @patch('pipeline_orchestrator.make_composite_stems')
+    def test_make_stems_flag_interactive_date_prompt(self, mock_make_stems, mock_prompt_date):
+        """When --make-stems is passed without date arguments, it prompts interactively for dates."""
+        pipeline_orchestrator.main(["--make-stems"])
+        mock_prompt_date.assert_called_once_with(
+            title="Date Filter for Composite Stem Generation",
+            all_label="generate stems for all songs"
+        )
+        mock_make_stems.assert_called_once_with(
+            pipeline_orchestrator.VERIFIED_AUDIO_DIR,
+            pipeline_orchestrator.STEMS_DIR,
+            target_date="2026-09-06",
+            start_date=None,
+            end_date=None
+        )
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

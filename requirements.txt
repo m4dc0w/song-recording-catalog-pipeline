@@ -1,3 +1,8 @@
 google-genai>=0.1.1
 python-dotenv>=1.0.0
 requests>=2.28.0
+
+# Optional: Composite Stem Separation (Demucs AI)
+# demucs>=4.0.0
+# torch>=2.0.0
+# torchaudio>=2.0.0

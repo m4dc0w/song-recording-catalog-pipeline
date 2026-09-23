@@ -23,7 +23,7 @@ def main():
             sys.modules['requests'] = mock_req
             sys.modules['requests.exceptions'] = mock_req.exceptions
 
-    for mod in ['dotenv', 'google', 'google.genai', 'google.genai.types']:
+    for mod in ['dotenv', 'google', 'google.genai', 'google.genai.types', 'demucs', 'demucs.api', 'torch', 'torchaudio']:
         try:
             __import__(mod)
         except ImportError:
@@ -36,6 +36,7 @@ def main():
     os.environ.setdefault("VERIFIED_AUDIO_DIR", os.path.join(os.getcwd(), "verified_audio"))
     os.environ.setdefault("VIDEOS_DIR", os.path.join(os.getcwd(), "verified_audio", "Videos"))
     os.environ.setdefault("MP3_DIR", os.path.join(os.getcwd(), "verified_audio", "MP3"))
+    os.environ.setdefault("STEMS_DIR", os.path.join(os.getcwd(), "verified_audio", "Stems"))
     os.environ.setdefault("PCO_APP_ID", "mock_app_id")
     os.environ.setdefault("PCO_SECRET", "mock_secret")
     os.environ.setdefault("GEMINI_API_KEY", "mock_gemini_api_key")

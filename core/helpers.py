@@ -185,7 +185,7 @@ def filename_to_song(filename: str) -> Optional[Song]:
     return Song(title=cleaned_title, key=embedded_key, date=None)
 
 
-def song_to_filename(song: Song, ext: Optional[str] = None) -> str:
+def song_to_filename(song: Song, ext: Optional[str] = None, stem_label: Optional[str] = None) -> str:
     """Serializes a Song dataclass into a standardized Title-Centric filename.
     
     Formatting rules:
@@ -193,6 +193,7 @@ def song_to_filename(song: Song, ext: Optional[str] = None) -> str:
         - If date only:      '<Title> - <Date><ext>'
         - If key only:       '<Title> - <Key><ext>'
         - If neither:        '<Title><ext>'
+        - If stem_label:     '<Title> ... - <stem_label><ext>'
         
     Examples:
         - Song('Amazing Grace', date='2024-08-04'), ext='.mp3'
@@ -201,6 +202,8 @@ def song_to_filename(song: Song, ext: Optional[str] = None) -> str:
           -> 'Amazing Grace - E - 2024-08-04.mp3'
         - Song('In Christ Alone', key='D-E', date='2026-09-13'), ext='.mp4'
           -> 'In Christ Alone - D-E - 2026-09-13.mp4'
+        - Song('Amazing Grace', key='E', date='2024-08-04'), ext='.wav', stem_label='vocal'
+          -> 'Amazing Grace - E - 2024-08-04 - vocal.wav'
     """
     parts = [song.title.strip()]
     if song.key and song.key.strip():
@@ -209,10 +212,34 @@ def song_to_filename(song: Song, ext: Optional[str] = None) -> str:
         parts.append(song.date.strip())
 
     stem = " - ".join(parts)
+    if stem_label and stem_label.strip():
+        stem = f"{stem} - {stem_label.strip()}"
+
     if ext:
         normalized_ext = ext if ext.startswith(".") else f".{ext}"
         return f"{stem}{normalized_ext}"
     return stem
+
+
+def song_to_stem_filename(song: Song | str, stem_label: str, ext: str = ".wav") -> str:
+    """Serializes a Song dataclass or filename into a standardized stem filename.
+    
+    Examples:
+        - Song('Amazing Grace', key='E', date='2024-08-04'), stem_label='vocal'
+          -> 'Amazing Grace - E - 2024-08-04 - vocal.wav'
+        - 'Amazing Grace - E - 2024-08-04.wav', stem_label='drums'
+          -> 'Amazing Grace - E - 2024-08-04 - drums.wav'
+    """
+    if isinstance(song, Song):
+        return song_to_filename(song, ext=ext, stem_label=stem_label)
+
+    parsed = filename_to_song(str(song))
+    if parsed:
+        return song_to_filename(parsed, ext=ext, stem_label=stem_label)
+
+    raw_base = Path(str(song)).stem
+    normalized_ext = ext if ext.startswith(".") else f".{ext}"
+    return f"{raw_base} - {stem_label.strip()}{normalized_ext}"
 
 
 def find_matching_song(target_title: str, candidates: List[Song]) -> Optional[Song]:
@@ -299,3 +326,4 @@ def find_matching_song(target_title: str, candidates: List[Song]) -> Optional[So
 # Backward-compatible aliases as requested in user prompt
 from_filename_to_song = filename_to_song
 from_song_to_filename = song_to_filename
+from_song_to_stem_filename = song_to_stem_filename

@@ -3,8 +3,10 @@ from core.schemas import Song
 from core.helpers import (
     filename_to_song,
     song_to_filename,
+    song_to_stem_filename,
     from_filename_to_song,
     from_song_to_filename,
+    from_song_to_stem_filename,
     find_matching_song,
     extract_key_from_song,
     is_valid_musical_key,
@@ -181,6 +183,35 @@ class TestCoreHelpers(unittest.TestCase):
         # Song with title only
         song4 = Song(title="Amazing Grace")
         self.assertEqual(song_to_filename(song4), "Amazing Grace")
+
+        # Song with stem_label
+        self.assertEqual(
+            song_to_filename(song2, ext=".wav", stem_label="vocal"),
+            "Amazing Grace - E - 2024-08-04 - vocal.wav"
+        )
+        self.assertEqual(
+            song_to_filename(song2, stem_label="drums"),
+            "Amazing Grace - E - 2024-08-04 - drums"
+        )
+
+    def test_song_to_stem_filename(self):
+        song = Song(title="Amazing Grace", key="E", date="2024-08-04")
+        self.assertEqual(
+            song_to_stem_filename(song, "vocal"),
+            "Amazing Grace - E - 2024-08-04 - vocal.wav"
+        )
+        self.assertEqual(
+            song_to_stem_filename("Amazing Grace - E - 2024-08-04.wav", "bass"),
+            "Amazing Grace - E - 2024-08-04 - bass.wav"
+        )
+        self.assertEqual(
+            song_to_stem_filename("Yet Not I But Through Christ In Me (D) - 2026-08-02.wav", "piano"),
+            "Yet Not I But Through Christ In Me - D - 2026-08-02 - piano.wav"
+        )
+        self.assertEqual(
+            from_song_to_stem_filename(song, "guitar"),
+            "Amazing Grace - E - 2024-08-04 - guitar.wav"
+        )
 
     def test_backward_compatible_aliases(self):
         song = from_filename_to_song("Amazing Grace - 2024-08-04.mp3")

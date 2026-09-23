@@ -2,10 +2,10 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-164%20Passing-brightgreen.svg)](run_tests.py)
+[![Tests](https://img.shields.io/badge/Tests-196%20Passing-brightgreen.svg)](run_tests.py)
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF.svg)](.github/workflows/test.yml)
 
-An end-to-end Python orchestration pipeline for music ministries and churches. This tool automates the tedious process of cataloging live service recordings by integrating directly with Planning Center Online (PCO), using Google Gemini's multimodal AI to intelligently segment raw master audio files, and preparing the final tracks for publication with FFmpeg-powered video and MP3 generation and automatic musical key enrichment.
+An end-to-end Python orchestration pipeline for music ministries and churches. This tool automates the tedious process of cataloging live service recordings by integrating directly with Planning Center Online (PCO), using Google Gemini's multimodal AI to intelligently segment raw master audio files, and preparing the final tracks for publication with FFmpeg-powered video and MP3 generation, Demucs hybrid composite stem separation, and automatic musical key enrichment.
 
 ## 🚀 Pipeline Features
 
@@ -19,6 +19,7 @@ An end-to-end Python orchestration pipeline for music ministries and churches. T
    - **Musical Key Enrichment:** Automatically synchronizes with Planning Center Online to enrich song filenames with their musical keys across verified audio, MP3, and video folders, featuring full support for key changes/modulations (e.g., `In Christ Alone - D-E - 2026-09-13.mp4`).
    - **Video Generation:** Generates OLED-safe, multiline typography MP4 videos from your verified audio using a precise 2-pass `loudnorm` audio normalization.
    - **High-Quality MP3 Generation:** Converts verified audio into normalized MP3s with EBU R128 loudness normalization (`-14 LUFS`), smooth 3-second crossfades, and high-quality LAME variable bitrate encoding (`-q:a 0`).
+   - **Composite Stem Separation:** Isolates 6-track stems (Vocals, Drums, Bass, Guitar, Piano, Other) using hybrid Demucs models (`htdemucs_ft` for rhythm and `htdemucs_6s` for chordal instruments) organized into dedicated per-song stem folders with 16-bit PCM WAV tracks.
 
 ---
 
@@ -64,6 +65,8 @@ flowchart TD
         Videos[("Video Archive<br/>VIDEOS_DIR<br/>(*.mp4)")]
         MakeMP3["MP3 Generator (make_mp3.py)<br/>• 2-Pass FFmpeg loudnorm (-14 LUFS) & afade<br/>• High-quality libmp3lame (-q:a 0)"]
         MP3s[("MP3 Archive<br/>MP3_DIR<br/>(*.mp3)")]
+        MakeStems["Composite Stem Generator (make_composite_stems.py)<br/>• htdemucs_ft: Vocals, Drums, Bass<br/>• htdemucs_6s: Guitar, Piano, Other"]
+        Stems[("Stems Archive<br/>STEMS_DIR<br/>{Song} - Stems/*.wav")]
     end
 
     %% Connections
@@ -89,6 +92,8 @@ flowchart TD
     MakeVideo --> Videos
     Verified --> MakeMP3
     MakeMP3 --> MP3s
+    Verified --> MakeStems
+    MakeStems --> Stems
 ```
 
 ---
@@ -102,8 +107,13 @@ Before running the script, ensure you have the following installed on your machi
    * *macOS (Homebrew):* `brew install ffmpeg`
    * *Linux (Ubuntu/Debian):* `sudo apt update && sudo apt install -y ffmpeg libfontconfig1`
    * *Windows:* Download from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) and add to your system PATH.
-3. **Google Gemini API Key:** Generate one for free from Google AI Studio via [https://aistudio.google.com/api-keys](https://aistudio.google.com/api-keys).
-4. **Planning Center API Keys:** Generate personal access tokens via [https://api.planningcenteronline.com/personal_access_tokens](https://api.planningcenteronline.com/personal_access_tokens).
+3. **PyTorch & Demucs (Optional / For Stem Separation):** For composite stem extraction:
+   ```bash
+   pip install demucs torchaudio torch
+   ```
+   *Hardware Acceleration:* Automatically utilizes Apple Silicon MPS (`mps`), NVIDIA CUDA (`cuda`), or CPU.
+4. **Google Gemini API Key:** Generate one for free from Google AI Studio via [https://aistudio.google.com/api-keys](https://aistudio.google.com/api-keys).
+5. **Planning Center API Keys:** Generate personal access tokens via [https://api.planningcenteronline.com/personal_access_tokens](https://api.planningcenteronline.com/personal_access_tokens).
 
 ---
 
@@ -152,9 +162,12 @@ python3 pipeline_orchestrator.py
   3. Automatically discovers the matching raw audio file in `RAW_AUDIO_DIR`.
   4. Generates an MP3 preview and uses Gemini AI to determine precise song timestamps.
   5. Slices the audio into individual tracks inside `PROCESSED_AUDIO_DIR`.
-  6. **Post-Processing (Stage Songs):** Copies and stages songs into `STAGING_AUDIO_DIR` (stripping the `Song_XX_` prefix).
-  7. **Post-Processing (Publish Verified):** Prompts you to confirm moving verified tracks from `STAGING_AUDIO_DIR` to `VERIFIED_AUDIO_DIR`.
-  8. **Post-Processing (Generate Videos):** Renders OLED-safe, loudness-normalized MP4 videos into `VIDEOS_DIR`.
+  6. **Post-Processing (Stage Songs):** Copies and stages songs into `STAGING_AUDIO_DIR` (stripping the `Song_XX_` prefix and handling duplicates).
+  7. **Post-Processing (Enrich Song Keys):** Synchronizes musical keys from Planning Center and updates filenames in `STAGING_AUDIO_DIR`.
+  8. **Post-Processing (Publish Verified):** Prompts you to confirm moving verified tracks from `STAGING_AUDIO_DIR` to `VERIFIED_AUDIO_DIR`.
+  9. **Post-Processing (Generate Videos):** Renders OLED-safe, loudness-normalized MP4 videos into `VIDEOS_DIR`.
+  10. **Post-Processing (Generate MP3 Audio):** Converts verified audio into normalized MP3s with EBU R128 loudness normalization and crossfades in `MP3_DIR`.
+  11. **Post-Processing (Generate Composite Stems):** Generates 6-track composite stems (vocals, drums, bass, guitar, piano, other) in `STEMS_DIR`.
 
 *Fine-Grained Controls & Overrides:*
 You can specify a date or date range to run segmentation only (interactively selecting the service type and plan without needing to look up IDs), adjust API query limits, bypass all menus for headless automation, or isolate specific stages:
@@ -261,9 +274,40 @@ Scans your `VERIFIED_AUDIO_DIR` for `.wav` files and converts them into normaliz
   python3 pipeline_orchestrator.py --make-mp3 --all
   ```
 
+**Generate Composite Stems (Demucs AI):**
+Separates source `.wav` files in `VERIFIED_AUDIO_DIR` into 6-track composite stems using a state-of-the-art dual-model Demucs strategy:
+- **Model Strategy:**
+  - **`htdemucs_ft` (Fine-Tuned 4-Stem):** Extracts ultra-clean **Vocals**, **Drums**, and **Bass**.
+  - **`htdemucs_6s` (6-Stem):** Extracts **Guitar**, **Piano**, and **Other**.
+- **Output Organization:** Each song creates its own subfolder in `STEMS_DIR` based on its filename (`STEMS_DIR/{input_filename} - Stems`), containing 16-bit PCM `.wav` files:
+  - `{input_filename} - vocal.wav`
+  - `{input_filename} - drums.wav`
+  - `{input_filename} - bass.wav`
+  - `{input_filename} - guitar.wav`
+  - `{input_filename} - piano.wav`
+  - `{input_filename} - other.wav`
+- **Smart Skipping & Memory Management:** Skips separation if all 6 stems already exist (use `--overwrite` to re-generate). Automatically cleans up PyTorch tensors and triggers garbage collection between passes to prevent unified/GPU memory leaks.
+- **Hardware Acceleration:** Auto-detects Apple Silicon (`mps`), NVIDIA CUDA (`cuda`), or falls back to CPU. You can force a specific device via `--device mps` or the `STEMS_DEVICE` environment variable.
+- **Interactive Date Prompt (Default):** Prompts for date filter options (single date, date range, or all songs) if no date arguments are provided.
+- Standalone execution:
+  ```bash
+  python3 pipeline_orchestrator.py --make-stems
+  # or directly using the module:
+  python3 -m post_processing.make_composite_stems
+  ```
+- Scoped to a specific date or date range:
+  ```bash
+  python3 pipeline_orchestrator.py --make-stems --date "2026-09-06"
+  python3 pipeline_orchestrator.py --make-stems --start-date "2026-08-01" --end-date "2026-08-31"
+  ```
+- Direct module options (custom paths, forced re-separation, device):
+  ```bash
+  python3 -m post_processing.make_composite_stems --src-dir "/path/to/wavs" --dest-dir "/path/to/stems" --device mps --overwrite
+  ```
+
 **Enrich Song Keys (Planning Center Integration):**
 Enriches song tracks with their musical keys from Planning Center (e.g., `<Title> - <Key> - <Date>.<ext>`).
-- **Pipeline Stage (Staging):** When run in the post-processing pipeline, key enrichment executes right before songs are published to `VERIFIED_AUDIO_DIR`, so songs in `STAGING_AUDIO_DIR` are enriched prior to video and MP3 generation.
+- **Pipeline Stage (Staging):** When run in the post-processing pipeline, key enrichment executes right before songs are published to `VERIFIED_AUDIO_DIR`, so songs in `STAGING_AUDIO_DIR` are enriched prior to video, MP3, and stem generation.
 - **Manual Runs (Verified / MP3 / Video Archives):** When invoked standalone (e.g. `--enrich-keys`), it scans and enriches existing files across `VERIFIED_AUDIO_DIR`, `MP3_DIR`, and `VIDEOS_DIR` (or custom directories).
 - **Key Modulation Support:** Fully supports both single keys (`E`, `Bm`, `Eb/G`) and key modulations/transitions (e.g., `D-E`, `C-D-E`, `Eb-F`).
 - **Heuristics & Clean Matching:** Uses exact title matching, normalized prefix heuristics, and parenthetical key extraction with automatic skipping for files that already have keys or where target filenames already exist.
@@ -291,11 +335,11 @@ Enriches song tracks with their musical keys from Planning Center (e.g., `<Title
 **Run Combined Post-Processing Stages:**
 When running multiple post-processing flags together without CLI date args, the orchestrator prompts for the date filter once and applies it across all selected stages:
 ```bash
-# Prompts for dates once, stages songs, enriches keys in staging, asks verification, and renders videos and MP3s:
-python3 pipeline_orchestrator.py --publish-staging --enrich-keys --publish-verified --make-videos --make-mp3
+# Prompts for dates once, stages songs, enriches keys in staging, asks verification, and renders videos, MP3s, and stems:
+python3 pipeline_orchestrator.py --publish-staging --enrich-keys --publish-verified --make-videos --make-mp3 --make-stems
 
 # Or process all songs across all stages without date prompting:
-python3 pipeline_orchestrator.py --publish-staging --enrich-keys --publish-verified --make-videos --make-mp3 --all
+python3 pipeline_orchestrator.py --publish-staging --enrich-keys --publish-verified --make-videos --make-mp3 --make-stems --all
 ```
 
 *(Note: Ensure an image exists at `assets/images/background.png` or specify a custom path in the code for video generation to work.)*
@@ -321,11 +365,11 @@ python3 pipeline_orchestrator_backfill.py
 # Backfill with custom plan limit and automatic staging scoped strictly to the backfill timeframe (inclusive)
 python3 pipeline_orchestrator_backfill.py --start-date "2024-01-01" --end-date "2024-12-31" --limit 200 --publish-staging
 
-# Full end-to-end backfill with staging, verification prompt, video/MP3 rendering, and key enrichment
-python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging --publish-verified --make-videos --make-mp3 --enrich-keys
+# Full end-to-end backfill with staging, verification prompt, video/MP3 rendering, stem generation, and key enrichment
+python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging --publish-verified --make-videos --make-mp3 --make-stems --enrich-keys
 
-# Run post-processing only (including key enrichment) for a previous backfill timeframe (skips plan fetching and segmentation)
-python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging --publish-verified --make-videos --make-mp3 --enrich-keys --post-processing-only
+# Run post-processing only (including stems and key enrichment) for a previous backfill timeframe (skips plan fetching and segmentation)
+python3 pipeline_orchestrator_backfill.py --start-date "2026-08-01" --end-date "2026-08-31" --publish-staging --publish-verified --make-videos --make-mp3 --make-stems --enrich-keys --post-processing-only
 ```
 
 *Logging Output & Errors to a File:*
