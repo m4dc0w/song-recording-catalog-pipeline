@@ -296,7 +296,6 @@ def segment_service_audio(plan: ServicePlan) -> None:
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=master_schema,
-            temperature=0.1
         )
     )
 

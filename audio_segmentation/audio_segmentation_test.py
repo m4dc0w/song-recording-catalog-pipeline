@@ -278,6 +278,14 @@ class TestAudioSegmentation(unittest.TestCase):
         mock_client_instance.files.upload.assert_called_once()
         mock_client_instance.models.generate_content.assert_called_once()
         
+        # Verify deprecated generation parameters (temperature, top_p, top_k, thinking_budget) are omitted
+        from audio_segmentation.audio_segmentation import types as genai_types
+        config_kwargs = genai_types.GenerateContentConfig.call_args.kwargs
+        self.assertNotIn('temperature', config_kwargs)
+        self.assertNotIn('top_p', config_kwargs)
+        self.assertNotIn('top_k', config_kwargs)
+        self.assertNotIn('thinking_budget', config_kwargs)
+        
         self.assertEqual(mock_slice.call_count, 2)
         mock_file.assert_called()
 
