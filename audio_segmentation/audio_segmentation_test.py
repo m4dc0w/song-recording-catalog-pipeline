@@ -285,6 +285,8 @@ class TestAudioSegmentation(unittest.TestCase):
         self.assertNotIn('top_p', config_kwargs)
         self.assertNotIn('top_k', config_kwargs)
         self.assertNotIn('thinking_budget', config_kwargs)
+        self.assertIn('automatic_function_calling', config_kwargs)
+        genai_types.AutomaticFunctionCallingConfig.assert_called_with(disable=True)
         
         self.assertEqual(mock_slice.call_count, 2)
         mock_file.assert_called()

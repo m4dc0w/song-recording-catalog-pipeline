@@ -296,6 +296,7 @@ def segment_service_audio(plan: ServicePlan) -> None:
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=master_schema,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
     )
 
